@@ -6,7 +6,7 @@
 #include <visp3/io/vpImageIo.h>
 #include <opencv.hpp>
 #include <pylon/PylonIncludes.h>
-#include <stdio.h>
+#include <iostream>
 
 using namespace Pylon;
 using namespace std;
@@ -21,6 +21,7 @@ public:
 	//Basler相机初始化，对现有的acA640-300gc和acA1300-60gc都适用
 	//灰度图像
 	void baslerOpen(vpImage< unsigned char > &I);
+	void baslerOpen(Mat &grayI);
 	//Basler相机初始化，对现有的acA640-300gc和acA1300-60gc都适用
 	//RGB图像
 	void baslerOpen(vpImage< vpRGBa > &I);
@@ -31,7 +32,7 @@ public:
 	//获取Basler相机的RGB图像,图像格式vpImage< vpRGBa>
 	void acquireBaslerImg(vpImage< vpRGBa> &I);
 	//获取Basler相机的RGB图像,图像格式Mat
-	void acquireBaslerImg(vpImage<unsigned char> &I, Mat &opencvImage);
+	void acquireBaslerImg(Mat &opencvImage);
 	//获取图片高度
 	unsigned int getHeight(void) const;
 	//获取图片宽度

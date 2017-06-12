@@ -28,6 +28,18 @@ void MmVisualServoBase::baslerOpen(vpImage< unsigned char > &I)
 	formatConverter.OutputPixelFormat = PixelType_Mono8;
 }
 
+void MmVisualServoBase::baslerOpen(Mat &grayI)
+{
+	GenApi::INodeMap& nodemap = camera.GetNodeMap();
+	cout << "Using device " << camera.GetDeviceInfo().GetModelName() << endl;
+	camera.Open();
+
+	width = nodemap.GetNode("Width");
+	height = nodemap.GetNode("Height");
+
+	formatConverter.OutputPixelFormat = PixelType_Mono8;
+}
+
 //Basler相机初始化，对现有的acA640-300gc和acA1300-60gc都适用
 //RGB图像
 void MmVisualServoBase::baslerOpen(vpImage< vpRGBa > &I)
@@ -96,7 +108,7 @@ void MmVisualServoBase::acquireBaslerImg(vpImage< vpRGBa> &I)
 }
 
 //获取Basler相机的RGB图像,图像格式Mat
-void MmVisualServoBase::acquireBaslerImg(vpImage<unsigned char> &I, Mat &opencvImage)
+void MmVisualServoBase::acquireBaslerImg(Mat &opencvImage)
 {
 	cv::Size frameSize = Size((int)width->GetValue(), (int)height->GetValue());
 	CGrabResultPtr ptrGrabResult;
@@ -111,7 +123,6 @@ void MmVisualServoBase::acquireBaslerImg(vpImage<unsigned char> &I, Mat &opencvI
 			formatConverter.Convert(pylonImage, ptrGrabResult);
 			opencvImage = cv::Mat(ptrGrabResult->GetHeight(), ptrGrabResult->GetWidth(), CV_8UC1, (uint_t*)pylonImage.GetBuffer());
 		}
-		vpImageConvert::convert(opencvImage, I);
 	}
 }
 

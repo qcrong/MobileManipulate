@@ -5,7 +5,7 @@
 #pragma once
 
 #include <opencv.hpp>
-#include <stdio.h>
+#include <iostream>
 
 using namespace std;
 using namespace cv;
