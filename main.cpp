@@ -13,10 +13,10 @@
 #include "MmArmBase.h"
 #include "MmAvoidObstacle.h"
 #include "MmMobileRobotBase.h"
-#include "MmPose.h"
+#include "MmData.h"
 #include "MmRFIDAlgorithm.h"
 #include "MmRFIDBase.h"
-#include "MmSocketServer.h"
+#include "MmSocketSrv.h"
 #include "MmVisualServoAlgorithm.h"
 #include "MmVisualServoBase.h"
 
@@ -28,22 +28,25 @@
 //using namespace std;
 
 //全局变量
+
 //VisualNavigationThread线程运行标志位，当该线程结束时标志位置1
 volatile int VisualNavigationFlag = 0;  //volatile来告诉编译器这个全局变量是易变的，让编译器不要对这个变量进行优化
 //ArmMotionThread线程运行标志位，当该线程结束时标志位置1
 volatile int ArmMotionFlag = 0;
-
 //使用关键代码段进行线程间同步
 CRITICAL_SECTION thread_cs;  
 
+
+//创建线程句柄
+HANDLE RFIDNavigationThread;		//RFID大范围导航线程
+HANDLE VisualNavigationThread;		//视觉局部调整线程
+HANDLE ArmMotionThread;				//机械臂抓取线程
+HANDLE MobileRobotAviodThread;		//移动机器人避障线程
+HANDLE ArmAvoidThread;				//机械臂避障线程
+HANDLE sendDatasThread;				//套接字数据发送线程
+//HANDLE recvDatasRhread;				//套接字数据接收线程
+
 //TCP全局变量
-struct Datas
-{
-	char name[10];
-	double score;
-	int number;
-	bool threadFlag;		//线程函数终止标志位，为1时线程退出,控制客户端读取线程退出
-};
 bool tcpThreadFlag = 0;		//线程函数终止标志位，为1时线程退出
 
 
@@ -53,9 +56,12 @@ bool tcpThreadFlag = 0;		//线程函数终止标志位，为1时线程退出
 //RFID导航线程函数
 DWORD WINAPI RFIDNavigationFun(LPVOID lpParameter)
 {
+	ResumeThread(MobileRobotAviodThread);
 	cout << "RFIDNavigationThread is running." << endl;
 	Sleep(100);
 	cout << "RFIDNavigationThread has finished." << endl;
+
+	ResumeThread(VisualNavigationThread);
 	return 0;
 }
 
@@ -70,6 +76,7 @@ DWORD WINAPI VisualNavigationFun(LPVOID lpParameter)
 	EnterCriticalSection(&thread_cs);
 	VisualNavigationFlag = 1;
 	LeaveCriticalSection(&thread_cs);
+
 	return 0;
 }
 
@@ -96,6 +103,10 @@ DWORD WINAPI MobileRobotAviodFun(LPVOID lpParameter)
 		Sleep(50);
 	}
 	cout << "MobileRobotAviodThread has finished." << endl;
+
+	//启动机械臂运动控制和避障线程
+	ResumeThread(ArmMotionThread);
+	ResumeThread(ArmAvoidThread);
 	return 0;
 }
 
@@ -115,7 +126,7 @@ DWORD WINAPI ArmAvoidFun(LPVOID lpParameter)
 DWORD WINAPI SendDatas(LPVOID lpParameter)
 {
 	const SOCKET sockConn = (SOCKET)lpParameter;
-	struct Datas data;
+	Datas data;
 	strcpy_s(data.name, "Server");
 	data.score = 92.5;
 	data.number = 0;
@@ -127,7 +138,7 @@ DWORD WINAPI SendDatas(LPVOID lpParameter)
 		memcpy(sendBuf, &data, sizeof(Datas));
 
 		send(sockConn, sendBuf, sizeof(Datas), 0);
-		Sleep(100);
+		Sleep(1000);
 		data.number++;
 	}
 	data.threadFlag = 1;
@@ -139,33 +150,33 @@ DWORD WINAPI SendDatas(LPVOID lpParameter)
 }
 
 //套接字数据接收线程
-DWORD WINAPI RecvDatas(LPVOID lpParameter)
-{
-	const SOCKET sockConn = (SOCKET)lpParameter;
-	int signalFlag = 0;
-
-	while (true)
-	{
-		char recvBuf[100];
-		memset(recvBuf, 0, sizeof(recvBuf));
-
-		//接收数据
-		recv(sockConn, recvBuf, 100, 0);		//第三参数为缓冲区的长度
-
-		memcpy(&signalFlag, recvBuf, sizeof(signalFlag));
-
-		//输出接收到的数据
-		printf("%d\n", signalFlag);
-
-		if (signalFlag == 30)
-		{
-			tcpThreadFlag = 1;		//线程标志位置1，退出线程
-			break;
-		}
-	}
-
-	return 0;
-}
+//DWORD WINAPI RecvDatas(LPVOID lpParameter)
+//{
+//	const SOCKET sockConn = (SOCKET)lpParameter;
+//	int signalFlag = 0;
+//
+//	while (true)
+//	{
+//		char recvBuf[100];
+//		memset(recvBuf, 0, sizeof(recvBuf));
+//
+//		//接收数据
+//		recv(sockConn, recvBuf, 100, 0);		//第三参数为缓冲区的长度
+//
+//		memcpy(&signalFlag, recvBuf, sizeof(signalFlag));
+//
+//		//输出接收到的数据
+//		printf("%d\n", signalFlag);
+//
+//		if (signalFlag == 30)
+//		{
+//			tcpThreadFlag = 1;		//线程标志位置1，退出线程
+//			break;
+//		}
+//	}
+//
+//	return 0;
+//}
 
 
 
@@ -218,37 +229,23 @@ void main
 		(SOCKADDR*)&addrSrv,	//强制类型装换，基于TCP/IP的socket编程过程中，可以用SOCKADDR_IN结构替换SOCKADDR，方便填写信息
 		sizeof(SOCKADDR)		//指定地址结构的长度
 		);
+
 	//设定已绑定的套接字为监听模式，准备接收客户请求
-
-	
-
 	listen(sockSrv, 20);		//第二个参数为等待队列的最大长度
-
 	SOCKADDR_IN addrClient;		//定义一个地址结构体SOCKADDR_IN变量，用来接收客户端的地址信息
-
 	printf("Waiting for client connect.\n");
 	//等待并接收客户端的连接请求
 	//accept返回一个相当于当前这个新连接的一个套接字描述符，保存于sockConn，然后利用这个套接字与客户端通信
 	int len = sizeof(SOCKADDR);
 	SOCKET sockConn = accept(sockSrv, (SOCKADDR*)&addrClient, &len);
-
-//	char recvBuf[100];
-	//接收数据
-//	recv(sockConn, recvBuf, 100, 0);		//第三参数为缓冲区的长度
-
-	/*while (recv(sockConn, recvBuf, 100, 0) <= 0)
-	{
-		sockConn = accept(sockSrv, (SOCKADDR*)&addrClient, &len);
-		Sleep(10);
-	}*/
-
 	printf("Accept client connect.\n");
 
-
+	
+	
 	/************************************************************************/
 	/*创建线程*/
 	/************************************************************************/
-	HANDLE RFIDNavigationThread = CreateThread(
+	RFIDNavigationThread = CreateThread(
 		NULL,				//让新线程使用默认安全性
 		0,					//设置线程初始栈的大小，让新线程采用与调用线程一样的栈大小
 		RFIDNavigationFun,			//新线程入口函数的地址
@@ -256,33 +253,71 @@ void main
 		CREATE_SUSPENDED,					//控制线程创建的附加标记，为0则创建后立线程立即执行，若为CREATE_SUSPENDED，则线程创建后处于暂停状态，直到程序调用了ResumeThread
 		NULL				//一个返回值，指向一个变量，用来接收线程ID，设置为NULL表示对线程的ID不感兴趣，不会返回线程的标识符
 		);
-	HANDLE VisualNavigationThread = CreateThread(NULL, 0, VisualNavigationFun, NULL, CREATE_SUSPENDED, NULL);
-	HANDLE ArmMotionThread = CreateThread(NULL, 0, ArmMotionFun, NULL, CREATE_SUSPENDED, NULL);
-	HANDLE MobileRobotAviodThread = CreateThread(NULL, 0, MobileRobotAviodFun, NULL, CREATE_SUSPENDED, NULL);
-	HANDLE ArmAvoidThread = CreateThread(NULL, 0, ArmAvoidFun, NULL, CREATE_SUSPENDED, NULL);
-	HANDLE sendDatasThread = CreateThread(NULL, 0, SendDatas, (LPVOID)sockConn, 0, NULL);
-	HANDLE recvDatasRhread = CreateThread(NULL, 0, RecvDatas, (LPVOID)sockConn, 0, NULL);
-
-
+	VisualNavigationThread = CreateThread(NULL, 0, VisualNavigationFun, NULL, CREATE_SUSPENDED, NULL);
+	ArmMotionThread = CreateThread(NULL, 0, ArmMotionFun, NULL, CREATE_SUSPENDED, NULL);
+	MobileRobotAviodThread = CreateThread(NULL, 0, MobileRobotAviodFun, NULL, CREATE_SUSPENDED, NULL);
+	ArmAvoidThread = CreateThread(NULL, 0, ArmAvoidFun, NULL, CREATE_SUSPENDED, NULL);
+	sendDatasThread = CreateThread(NULL, 0, SendDatas, (LPVOID)sockConn, 0, NULL);
+	
 	InitializeCriticalSection(&thread_cs);		//初始化关键代码段
 
+
+	/************************************************************************/
+	/*接收客户端指令并*/
+	/************************************************************************/
+	MmClientToSrvDatas clientToServDatas;
+
+	while (true)
+	{
+		char recvBuf[100];
+		memset(recvBuf, 0, sizeof(recvBuf));
+
+		//接收数据
+		recv(sockConn, recvBuf, 100, 0);		//第三参数为缓冲区的长度
+
+		memcpy(&clientToServDatas, recvBuf, sizeof(MmClientToSrvDatas));
+
+		switch (clientToServDatas.contralSignal)
+		{
+		case NAVIGATIONSTART:ResumeThread(RFIDNavigationThread); break;
+
+
+			
+		default:
+			break;
+		}
+
+		//输出接收到的数据
+//		printf("%d\n", clientToServDatas.contralSignal);
+
+		if (clientToServDatas.contralSignal == EXITPROGRAM)
+		{
+			tcpThreadFlag = 1;		//线程标志位置1，退出线程
+			break;
+		}
+	}
+
+	
+//	recvDatasRhread = CreateThread(NULL, 0, RecvDatas, (LPVOID)sockConn, 0, NULL);
+
+
 	//启动RFID导航线程及小车避障线程
-	ResumeThread(RFIDNavigationThread);
-	ResumeThread(MobileRobotAviodThread);
-	//等待RFID导航线程线程退出
-	WaitForSingleObject(RFIDNavigationThread, INFINITE);
-	//RFID导航结束后进入视觉位姿调整
-	ResumeThread(VisualNavigationThread);
-	WaitForSingleObject(VisualNavigationThread, INFINITE);
-	WaitForSingleObject(MobileRobotAviodThread, INFINITE);
-	//视觉位姿调整结束后进入机械臂运动线程，并启动机械臂避障线程
-	ResumeThread(ArmMotionThread);
-	ResumeThread(ArmAvoidThread);
-	WaitForSingleObject(ArmMotionThread, INFINITE);	
-	WaitForSingleObject(ArmAvoidThread, INFINITE);
-	//等待SOCKET线程退出
-	WaitForSingleObject(sendDatasThread, INFINITE);
-	WaitForSingleObject(recvDatasRhread, INFINITE);
+	//ResumeThread(RFIDNavigationThread);
+	//ResumeThread(MobileRobotAviodThread);
+	////等待RFID导航线程线程退出
+	//WaitForSingleObject(RFIDNavigationThread, INFINITE);
+	////RFID导航结束后进入视觉位姿调整
+	//ResumeThread(VisualNavigationThread);
+	//WaitForSingleObject(VisualNavigationThread, INFINITE);
+	//WaitForSingleObject(MobileRobotAviodThread, INFINITE);
+	////视觉位姿调整结束后进入机械臂运动线程，并启动机械臂避障线程
+	//ResumeThread(ArmMotionThread);
+	//ResumeThread(ArmAvoidThread);
+	//WaitForSingleObject(ArmMotionThread, INFINITE);	
+	//WaitForSingleObject(ArmAvoidThread, INFINITE);
+	////等待SOCKET线程退出
+	//WaitForSingleObject(sendDatasThread, INFINITE);
+//	WaitForSingleObject(recvDatasRhread, INFINITE);
 
 	//关闭线程句柄
 	CloseHandle(RFIDNavigationThread);
@@ -290,4 +325,7 @@ void main
 	CloseHandle(ArmMotionThread);
 	CloseHandle(MobileRobotAviodThread);
 	CloseHandle(ArmAvoidThread);
+	CloseHandle(sendDatasThread);
+
+	cout << "exit program" << endl;
 }
