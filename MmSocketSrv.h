@@ -16,6 +16,9 @@ using namespace cv;
 const int NOSIGNAL = 0;
 const int NAVIGATIONSTART = 1;
 const int EXITPROGRAM = -1;
+const int EXITSOCKET = -2;
+const int NAVIGATIONSTOP = -3;
+
 
 //客户端给服务端发送数据的标志位，为1时发送数据
 extern bool sendDatasFlag;
