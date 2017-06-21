@@ -28,16 +28,17 @@
 //using namespace std;
 
 //全局变量
-
+//volatile来告诉编译器这个全局变量是易变的，让编译器不要对这个变量进行优化
 //VisualNavigationThread线程运行标志位，当该线程结束时标志位置1
-volatile int VisualNavigationFlag = 0;  //volatile来告诉编译器这个全局变量是易变的，让编译器不要对这个变量进行优化
+volatile int VisualNavigationFlag = 0;  
 //ArmMotionThread线程运行标志位，当该线程结束时标志位置1
 volatile int ArmMotionFlag = 0;
 //客户端按下停止按钮时，ThreadsExitFlag置1，机器人线程退出
 volatile int ThreadsExitFlag = 0;
 //使用关键代码段进行线程间同步
 CRITICAL_SECTION thread_cs;  
-
+//自动导航标志位，该标志位为NAVIGATIONSTART时，先后自动执行RFID导航，视觉位姿调整和机械臂抓取
+int navigationAutoflag = 0;		
 
 //创建线程句柄
 HANDLE RFIDNavigationThread;		//RFID大范围导航线程
@@ -52,28 +53,47 @@ HANDLE sendDatasThread;				//套接字数据发送线程
 int tcpThreadFlag = 0;		//线程函数终止标志位，为1时线程退出
 
 
+
 /************************************************************************/
 /*线程函数*/
 /************************************************************************/
 //RFID导航线程函数
 DWORD WINAPI RFIDNavigationFun(LPVOID lpParameter)
 {
+	ResumeThread(MobileRobotAviodThread);
 	while (ThreadsExitFlag != NAVIGATIONSTOP)
 	{
-		ResumeThread(MobileRobotAviodThread);
 		cout << "1. RFIDNavigationThread is running." << endl;
 		Sleep(100);
 		cout << "3. RFIDNavigationThread has finished." << endl;
 		break;
 	}
 	
-	ResumeThread(VisualNavigationThread);
+	//连续自动导航，启动下一环节
+	if (navigationAutoflag == NAVIGATIONSTART)
+	{
+		ResumeThread(VisualNavigationThread);
+	}
+	else
+	{
+		//避障线程结束标志位置1，避障线程退出
+		EnterCriticalSection(&thread_cs);
+		VisualNavigationFlag = 1;
+		LeaveCriticalSection(&thread_cs);
+	}
+	
 	return 0;
 }
 
 //视觉导航线程函数
 DWORD WINAPI VisualNavigationFun(LPVOID lpParameter)
 {
+	//非自动导航情况下，避障线程需要单独开启
+	if (navigationAutoflag != NAVIGATIONSTART)
+	{
+		ResumeThread(MobileRobotAviodThread);
+	}
+
 	while (ThreadsExitFlag != NAVIGATIONSTOP)
 	{
 		cout << "4. VisualNavigationThread is running." << endl;
@@ -82,7 +102,7 @@ DWORD WINAPI VisualNavigationFun(LPVOID lpParameter)
 		break;
 	}
 	
-	//线程结束标志位置1
+	//避障线程结束标志位置1，避障线程退出
 	EnterCriticalSection(&thread_cs);
 	VisualNavigationFlag = 1;
 	LeaveCriticalSection(&thread_cs);
@@ -93,6 +113,7 @@ DWORD WINAPI VisualNavigationFun(LPVOID lpParameter)
 //机械臂运动控制线程函数
 DWORD WINAPI ArmMotionFun(LPVOID lpParameter)
 {
+	ResumeThread(ArmAvoidThread);
 	while (ThreadsExitFlag != NAVIGATIONSTOP)
 	{
 		cout << "7. ArmMotionThread is running." << endl;
@@ -118,9 +139,12 @@ DWORD WINAPI MobileRobotAviodFun(LPVOID lpParameter)
 	}
 	cout << "6. MobileRobotAviodThread has finished." << endl;
 
-	//启动机械臂运动控制和避障线程
-	ResumeThread(ArmMotionThread);
-	ResumeThread(ArmAvoidThread);
+	if (navigationAutoflag == NAVIGATIONSTART)
+	{
+		//启动机械臂运动控制线程
+		ResumeThread(ArmMotionThread);
+	}
+	
 	return 0;
 }
 
@@ -133,6 +157,8 @@ DWORD WINAPI ArmAvoidFun(LPVOID lpParameter)
 		Sleep(50);
 	}
 	cout << "10. ArmAvoidThread has finished." << endl;
+
+	navigationAutoflag = 0;			//自动导航完成，标志位置零
 	return 0;
 }
 
@@ -162,12 +188,13 @@ DWORD WINAPI SendDatas(LPVOID lpParameter)
 
 	return 0;
 }
-//定位导航线程函数创建
-void createRobotThreads()
+//自动连续定位导航开启
+void startAutoNavigation()
 {
-	VisualNavigationFlag = 0;
-	ArmMotionFlag = 0;
+	VisualNavigationFlag = 0;	
+	ArmMotionFlag = 0;			
 	ThreadsExitFlag = 0;
+	navigationAutoflag = NAVIGATIONSTART;
 
 	RFIDNavigationThread = CreateThread(
 		NULL,				//让新线程使用默认安全性
@@ -183,6 +210,41 @@ void createRobotThreads()
 	ArmAvoidThread = CreateThread(NULL, 0, ArmAvoidFun, NULL, CREATE_SUSPENDED, NULL);
 }
 
+//RFID定位导航线程函数创建
+void startRFIDNavigation()
+{
+	VisualNavigationFlag = 0;
+	ArmMotionFlag = 0;
+	ThreadsExitFlag = 0;
+	navigationAutoflag = RFIDNAVIGATION;
+
+	RFIDNavigationThread = CreateThread(NULL, 0, RFIDNavigationFun, NULL, 0, NULL);
+	MobileRobotAviodThread = CreateThread(NULL, 0, MobileRobotAviodFun, NULL, CREATE_SUSPENDED, NULL);
+}
+
+//视觉调整线程函数创建
+void startVisualNavigation()
+{
+	VisualNavigationFlag = 0;
+	ArmMotionFlag = 0;
+	ThreadsExitFlag = 0;
+	navigationAutoflag = VISUALNAVIGATION;
+
+	VisualNavigationThread = CreateThread(NULL, 0, VisualNavigationFun, NULL, 0, NULL);
+	MobileRobotAviodThread = CreateThread(NULL, 0, MobileRobotAviodFun, NULL, CREATE_SUSPENDED, NULL);
+}
+
+//机械臂控制线程函数创建
+void startArmControl()
+{
+	VisualNavigationFlag = 0;
+	ArmMotionFlag = 0;
+	ThreadsExitFlag = 0;
+	navigationAutoflag = ARMCONTROL;
+
+	ArmMotionThread = CreateThread(NULL, 0, ArmMotionFun, NULL, 0, NULL);
+	ArmAvoidThread = CreateThread(NULL, 0, ArmAvoidFun, NULL, CREATE_SUSPENDED, NULL);
+}
 
 
 /************************************************************************/
@@ -194,24 +256,7 @@ void main
    char **argv
    )
 {
-	///************************************************************************/
-	///*创建线程*/
-	///************************************************************************/
-	//RFIDNavigationThread = CreateThread(
-	//	NULL,				//让新线程使用默认安全性
-	//	0,					//设置线程初始栈的大小，让新线程采用与调用线程一样的栈大小
-	//	RFIDNavigationFun,			//新线程入口函数的地址
-	//	NULL,				//向新线程传递的参数，这个参数可以是一个数值，也可以是指向其他信息的指针
-	//	CREATE_SUSPENDED,					//控制线程创建的附加标记，为0则创建后立线程立即执行，若为CREATE_SUSPENDED，则线程创建后处于暂停状态，直到程序调用了ResumeThread
-	//	NULL				//一个返回值，指向一个变量，用来接收线程ID，设置为NULL表示对线程的ID不感兴趣，不会返回线程的标识符
-	//	);
-	//VisualNavigationThread = CreateThread(NULL, 0, VisualNavigationFun, NULL, CREATE_SUSPENDED, NULL);
-	//ArmMotionThread = CreateThread(NULL, 0, ArmMotionFun, NULL, CREATE_SUSPENDED, NULL);
-	//MobileRobotAviodThread = CreateThread(NULL, 0, MobileRobotAviodFun, NULL, CREATE_SUSPENDED, NULL);
-	//ArmAvoidThread = CreateThread(NULL, 0, ArmAvoidFun, NULL, CREATE_SUSPENDED, NULL);
-
-	InitializeCriticalSection(&thread_cs);		//初始化关键代码段
-
+	InitializeCriticalSection(&thread_cs);		//初始化关键代码段，用于线程间同步
 
 	/************************************************************************/
 	/*创建套接字*/
@@ -285,9 +330,11 @@ void main
 
 			switch (clientToServDatas.contralSignal)
 			{
-			case NAVIGATIONSTART:createRobotThreads(); break;
-			case NAVIGATIONSTOP:ThreadsExitFlag = NAVIGATIONSTOP; break;
-
+			case NAVIGATIONSTART:startAutoNavigation(); break;		//自动连续导航，启动
+			case NAVIGATIONSTOP:ThreadsExitFlag = NAVIGATIONSTOP; break;		//导航退出
+			case RFIDNAVIGATION:startRFIDNavigation(); break;		//RFID单独导航，RFID
+			case VISUALNAVIGATION:startVisualNavigation(); break;	//视觉调整，移动平台
+			case ARMCONTROL:startArmControl(); break;			//机械臂控制，机械臂
 
 			default:
 				break;

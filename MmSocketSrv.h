@@ -14,10 +14,14 @@ using namespace cv;
 
 //控制信号定义
 const int NOSIGNAL = 0;
-const int NAVIGATIONSTART = 1;
-const int EXITPROGRAM = -1;
-const int EXITSOCKET = -2;
-const int NAVIGATIONSTOP = -3;
+const int NAVIGATIONSTART = 1;		//自动连续导航
+const int RFIDNAVIGATION = 2;		//RFID导航
+const int VISUALNAVIGATION = 3;		//视觉调整
+const int ARMCONTROL = 4;			//机械臂控制
+
+const int EXITPROGRAM = -1;			//退出程序
+const int EXITSOCKET = -2;			//断开远程连接
+const int NAVIGATIONSTOP = -3;		//导航停止
 
 
 //客户端给服务端发送数据的标志位，为1时发送数据
