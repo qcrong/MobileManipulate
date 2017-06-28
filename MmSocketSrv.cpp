@@ -21,7 +21,7 @@ MmSocketServer::~MmSocketServer()
 
 MmClientToSrvDatas::MmClientToSrvDatas()
 {
-	contralSignal = 0;
+	contralSignal = NOSIGNAL;
 }
 
 MmClientToSrvDatas::~MmClientToSrvDatas()
@@ -29,19 +29,75 @@ MmClientToSrvDatas::~MmClientToSrvDatas()
 }
 
 /************************************************************************/
-/* 客户端向服务端发送的数据类*/
+/* 服务端向客户端发送的数据类*/
 /************************************************************************/
-Datas::Datas()
+MmsrvToClientDatas::MmsrvToClientDatas()
+{
+	////RFID定位结果
+	//rfidX = 0.0;
+	//rfidY = 0.0;
+	//rfidTh = 0.0;
+	////视觉定位结果
+	//visualX = 0.0;
+	//visualY = 0.0;
+	//visualTh = 0.0;
+	////里程计定位结果
+	//odomX = 0, 0; 
+	//odomY = 0.0;
+	//odomTh = 0.0;
+	////机械臂末端姿态
+	//armX = 0.0; 
+	//armY = 0.0; 
+	//armZ = 0.0; 
+	//armAlpha = 0.0;
+	//armBeta = 0.0;
+	//armGamma = 0.0;
+	////是否有文字信息，有为1，无为0
+	//bool haveWorldsFlag = 0;
+
+	//contralSignal = NOSIGNAL;		//控制信号
+	//threadFlag = 0;	//服务端套接字退出标志位，发送给客户端，为1时客户端接收线程退出
+}
+
+MmsrvToClientDatas::~MmsrvToClientDatas()
 {
 }
 
-Datas::~Datas()
+MmsrvToClientDatas srvToClientDatas;
+
+void MmsrvToClientDatas::init()
 {
+	//RFID定位结果
+	rfidX = 0.0;
+	rfidY = 0.0;
+	rfidTh = 0.0;
+	//视觉定位结果
+	visualX = 0.0;
+	visualY = 0.0;
+	visualTh = 0.0;
+	//里程计定位结果
+	odomX = 0, 0;
+	odomY = 0.0;
+	odomTh = 0.0;
+	//机械臂末端姿态
+	armX = 0.0;
+	armY = 0.0;
+	armZ = 0.0;
+	armAlpha = 0.0;
+	armBeta = 0.0;
+	armGamma = 0.0;
+	//是否有文字信息，有为1，无为0
+	bool haveWorldsFlag = 0;
+
+	contralSignal = NOSIGNAL;		//控制信号
+	threadFlag = 0;	//服务端套接字退出标志位，发送给客户端，为1时客户端接收线程退出
 }
 
-void Datas::play()
+
+void MmsrvToClientDatas::play()
 {
-	number++;
+	rfidTh += 0.1;
+
 }
 
 /************************************************************************/

@@ -165,27 +165,29 @@ DWORD WINAPI ArmAvoidFun(LPVOID lpParameter)
 //套接字数据发送线程
 DWORD WINAPI SendDatas(LPVOID lpParameter)
 {
+	srvToClientDatas.init();
 	const SOCKET sockConn = (SOCKET)lpParameter;
-	Datas data;
-	strcpy_s(data.name, "Server");
-	data.score = 92.5;
-	data.number = 0;
-	data.threadFlag = 0;
-	char sendBuf[100];
+	strcpy_s(srvToClientDatas.worlds, "Server");
+	srvToClientDatas.rfidX = 92.5;
+	srvToClientDatas.visualY = 10.2;
+	srvToClientDatas.odomTh = 0.3;
+	srvToClientDatas.armGamma = 40.5;
+	char sendBuf[500];
 	while (tcpThreadFlag != EXITSOCKET)
 	{
 		memset(sendBuf, 0, sizeof(sendBuf));		//对该段内存清零
-		memcpy(sendBuf, &data, sizeof(Datas));
+		memcpy(sendBuf, &srvToClientDatas, sizeof(MmsrvToClientDatas));
 
-		send(sockConn, sendBuf, sizeof(Datas), 0);
-		Sleep(1000);
-		data.number++;
+		send(sockConn, sendBuf, sizeof(MmsrvToClientDatas), 0);
+		Sleep(100);
+		srvToClientDatas.play();
 	}
-	data.threadFlag = 1;
-	memset(sendBuf, 0, sizeof(sendBuf));		//对该段内存清零
-	memcpy(sendBuf, &data, sizeof(Datas));
-	send(sockConn, sendBuf, sizeof(Datas), 0);
-
+	//srvToClientDatas.threadFlag = 1;
+	//memset(sendBuf, 0, sizeof(sendBuf));		//对该段内存清零
+	//memcpy(sendBuf, &srvToClientDatas, sizeof(MmsrvToClientDatas));
+	//send(sockConn, sendBuf, sizeof(MmsrvToClientDatas), 0);
+	//Sleep(500);
+	tcpThreadFlag = 0;
 	return 0;
 }
 //自动连续定位导航开启
@@ -350,7 +352,11 @@ void main
 				break;
 			}
 		}
-		Sleep(300);
+		
+		while (tcpThreadFlag == EXITSOCKET)
+		{
+			Sleep(100);
+		}
 		closesocket(sockConn);		//关闭套接字
 		if (clientToServDatas.contralSignal == EXITPROGRAM)
 		{

@@ -73,26 +73,34 @@ private:
 extern MmClientToSrvDatas clientToServDatas;
 
 /************************************************************************/
-/* 客户端向服务端发送的数据类*/
+/* 服务端向客户端发送的数据类*/
 /************************************************************************/
 
-class Datas
+class MmsrvToClientDatas
 {
 public:
-	Datas();
-	~Datas();
-	char name[10];
-	double score;
-	int number;
-	bool threadFlag;
+	MmsrvToClientDatas();
+	~MmsrvToClientDatas();
+	void init();
+	//RFID定位结果
+	double rfidX, rfidY, rfidTh;
+	//视觉定位结果
+	double visualX, visualY, visualTh;
+	//里程计定位结果
+	double odomX, odomY, odomTh;
+	//机械臂末端姿态
+	double armX, armY, armZ, armAlpha, armBeta, armGamma;
+	
+	//是否有文字信息，有为1，无为0
+	bool haveWorldsFlag;	
+	//存储要发送的文字信息
+	char worlds[20];	
+
+	int contralSignal;		//控制信号
+	bool threadFlag;	//服务端套接字退出标志位，发送给客户端，为1时客户端接收线程退出
 	void play();
 private:
 
 };
+extern MmsrvToClientDatas srvToClientDatas;
 
-/************************************************************************/
-/* 客户端向服务端发送的数据类*/
-/************************************************************************/
-//DWORD WINAPI SendDatas(LPVOID lpParameter);
-//
-//DWORD WINAPI RecvDatas(LPVOID lpParameter);
