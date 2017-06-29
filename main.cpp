@@ -10,15 +10,15 @@
 
 //自建类的头文件
 //#include <WinSock2.h>
-#include "MmArmBase.h"
+//#include "MmArmBase.h"
 #include "MmAvoidObstacle.h"
 #include "MmMobileRobotBase.h"
 #include "MmData.h"
 #include "MmRFIDAlgorithm.h"
 #include "MmRFIDBase.h"
 #include "MmSocketSrv.h"
-#include "MmVisualServoAlgorithm.h"
-#include "MmVisualServoBase.h"
+//#include "MmVisualServoAlgorithm.h"
+//#include "MmVisualServoBase.h"
 
 
 #include <windows.h>
@@ -182,11 +182,6 @@ DWORD WINAPI SendDatas(LPVOID lpParameter)
 		Sleep(100);
 		srvToClientDatas.play();
 	}
-	//srvToClientDatas.threadFlag = 1;
-	//memset(sendBuf, 0, sizeof(sendBuf));		//对该段内存清零
-	//memcpy(sendBuf, &srvToClientDatas, sizeof(MmsrvToClientDatas));
-	//send(sockConn, sendBuf, sizeof(MmsrvToClientDatas), 0);
-	//Sleep(500);
 	tcpThreadFlag = 0;
 	return 0;
 }
