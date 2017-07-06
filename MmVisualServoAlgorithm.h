@@ -6,6 +6,12 @@
 
 #include <opencv.hpp>
 #include <iostream>
+//#include <visp3/gui/vpDisplayX.h>
+#include <visp3/gui/vpDisplayOpenCV.h>
+#include <visp3/visual_features/vpFeatureBuilder.h>
+#include <visp3/io/vpImageIo.h>
+#include <visp3/vs/vpServo.h>
+#include <visp3/vs/vpServoDisplay.h>
 
 using namespace std;
 using namespace cv;

@@ -46,8 +46,8 @@ HANDLE VisualNavigationThread;		//视觉局部调整线程
 HANDLE ArmMotionThread;				//机械臂抓取线程
 HANDLE MobileRobotAviodThread;		//移动机器人避障线程
 HANDLE ArmAvoidThread;				//机械臂避障线程
-HANDLE sendDatasThread;				//套接字数据发送线程
-//HANDLE recvDatasRhread;				//套接字数据接收线程
+HANDLE SendDatasThread;				//套接字数据发送线程
+HANDLE CamThread;				//套接字数据接收线程
 
 //TCP全局变量
 int tcpThreadFlag = 0;		//线程函数终止标志位，为1时线程退出
@@ -117,7 +117,10 @@ DWORD WINAPI ArmMotionFun(LPVOID lpParameter)
 	while (ThreadsExitFlag != NAVIGATIONSTOP)
 	{
 		cout << "7. ArmMotionThread is running." << endl;
-		Sleep(100);
+//		Sleep(100);
+		
+
+		
 		cout << "9. ArmMotionThread has finished." << endl;
 		break;
 	}
@@ -126,6 +129,159 @@ DWORD WINAPI ArmMotionFun(LPVOID lpParameter)
 	EnterCriticalSection(&thread_cs);
 	ArmMotionFlag = 1;
 	LeaveCriticalSection(&thread_cs);
+	return 0;
+}
+
+//摄像机线程
+DWORD WINAPI Camera(LPVOID lpParameter)
+{
+	
+	cout << "9. CamThread is running." << endl;
+//	while (ArmMotionFlag == 0)
+//	{
+		try
+		{
+			vpCameraParameters cam(1017.13738, 1016.70876, 332.59991, 238.92479); //摄像相机内参数px py u0 v0
+			vpHomogeneousMatrix eMc;//手到眼的齐次变换矩阵
+			eMc[0][0] = 0.02392906951946957;
+			eMc[0][1] = -0.9996695279615721;
+			eMc[0][2] = -0.009393321937448875;
+			eMc[0][3] = 3.921601488734311;
+			eMc[1][0] = -0.9978755364802699;
+			eMc[1][1] = -0.02445353703931933;
+			eMc[1][2] = 0.06038574517616292;
+			eMc[1][3] = 71.88804515813692;
+			eMc[2][0] = -0.0605954893217822;
+			eMc[2][1] = 0.007928391473358304;
+			eMc[2][2] = -0.9981309169054426;
+			eMc[2][3] = -7.847588857483204;
+
+			//目标物坐标系下特征点的坐标VISP
+			vector<vpPoint> point;
+			point.push_back(vpPoint(-0.05, -0.05, 0));
+			point.push_back(vpPoint( 0.05, -0.05, 0));
+			point.push_back(vpPoint( 0.05,  0.05, 0));
+			point.push_back(vpPoint(-0.05,  0.05, 0));
+			//目标物坐标系下特征点的坐标OpenCV,用于solvePnP
+			vector<Point3f> point3D;
+			point3D.push_back(Point3f(-0.05, -0.05, 0));
+			point3D.push_back(Point3f( 0.05, -0.05, 0));
+			point3D.push_back(Point3f( 0.05,  0.05, 0));
+			point3D.push_back(Point3f(-0.05,  0.05, 0));
+			//像素坐标系下特征点的坐标OpenCV,用于solvePnP
+			vector<Point2f> point2D;
+
+			vpServo task;
+			task.setServo(vpServo::EYEINHAND_CAMERA);
+			task.setForceInteractionMatrixComputation(vpServo::CURRENT);	//使用当前点的深度信息
+			task.setLambda(0.5);    //系数
+
+			//获取图像
+			MmVisualServoBase baslerCam;	//相机类
+			vpImage<unsigned char> currentImage;		//当前灰度图像
+			baslerCam.baslerOpen(currentImage);		//打开相机
+
+			vpFeaturePoint p[4], pd[4];		//当前和理想4个特征点坐标
+			vector<vpDot2> desireDot(4), currentDot(4);			//理想和当前的4个色块
+
+			enum { DETECTION = 0, DESIRE = 1, CURRENT = 2, TRACKING = 3 };
+			int mode = DETECTION;
+			string msg = "Press 'd' to start get 4 desire feature points";		//图片上显示的提示信息
+			int key;	//按键值
+
+			vpDisplayOpenCV d(currentImage, 0, 0, "Current camera image");
+			while (ArmMotionFlag == 0)
+			{
+				baslerCam.acquireBaslerImg(currentImage);
+
+				key = 0xff & waitKey(100);
+				if (key == 'd')
+				{
+					mode = DESIRE;
+				}
+				if (key == 'c')
+				{
+					mode = CURRENT;
+				}
+
+				if (mode == DETECTION)
+				{
+					vpDisplay::display(currentImage);
+					vpDisplay::displayText(currentImage, 10, 10, msg, vpColor::red);
+					vpDisplay::flush(currentImage);		//显示图像
+					
+				}
+				if (mode == DESIRE)
+				{
+					vpDisplay::display(currentImage);
+					vpDisplay::displayText(currentImage, 10, 10, "Click in the 4 dots to initialize the desire feature points", vpColor::red);
+					vpDisplay::flush(currentImage);		//显示图像
+
+					//理想位置特征记录
+					vpImagePoint dot;
+					for (unsigned int i = 0; i < 4; i++)
+					{
+						desireDot[i].setGraphics(true);
+						desireDot[i].initTracking(currentImage);
+						vpDisplay::flush(currentImage);
+						vpFeatureBuilder::create(pd[i], cam, desireDot[i].getCog());		//获取色块重心图像坐标，这里没有深度信息
+						dot = desireDot[i].getCog();
+						cout << "pd" << i << ": " << pd[i].get_x() << "  " << pd[i].get_y() << endl;
+						cout << "dot" << i << ": " << dot.get_u() << "  " << dot.get_v() << endl;
+					}
+
+					//solvePnP求解cdMo
+
+
+
+					//返回刷图模式，等待按键c
+					mode = DETECTION;
+					msg = "Press 'c' to start get 4 current feature points";
+				}
+				if (mode = CURRENT)
+				{
+					vpDisplay::display(currentImage);
+					vpDisplay::displayText(currentImage, 10, 10, "Click in the 4 dots to initialize the current feature points", vpColor::red);
+					vpDisplay::flush(currentImage);		//显示图像
+
+					//理想位置特征记录
+					for (unsigned int i = 0; i < 4; i++)
+					{
+						currentDot[i].setGraphics(true);
+						currentDot[i].initTracking(currentImage);
+						vpDisplay::flush(currentImage);
+						vpFeatureBuilder::create(p[i], cam, currentDot[i].getCog());		//获取色块重心图像坐标，这里没有深度信息
+					}
+					for (unsigned int i = 0; i < 4; i++)
+					{
+						task.addFeature(p[i], pd[i]);
+					}
+					mode = TRACKING;
+				}
+				if (mode == TRACKING)
+				{
+
+				}
+				
+			}
+
+
+			
+
+			
+
+			
+
+
+		}
+		catch (vpException &e) {
+			std::cout << "Catch an exception: " << e << std::endl;
+		}
+
+
+//	}
+	cout << "10.CamThread has finished." << endl;
+
 	return 0;
 }
 
@@ -151,6 +307,7 @@ DWORD WINAPI MobileRobotAviodFun(LPVOID lpParameter)
 //机械臂避障线程
 DWORD WINAPI ArmAvoidFun(LPVOID lpParameter)
 {
+	ResumeThread(CamThread);
 	cout << "8. ArmAvoidThread is running." << endl;
 	while (ArmMotionFlag == 0)
 	{
@@ -208,6 +365,7 @@ void startAutoNavigation()
 		);
 	VisualNavigationThread = CreateThread(NULL, 0, VisualNavigationFun, NULL, CREATE_SUSPENDED, NULL);
 	ArmMotionThread = CreateThread(NULL, 0, ArmMotionFun, NULL, CREATE_SUSPENDED, NULL);
+	CamThread = CreateThread(NULL, 0, Camera, NULL, CREATE_SUSPENDED, NULL);
 	MobileRobotAviodThread = CreateThread(NULL, 0, MobileRobotAviodFun, NULL, CREATE_SUSPENDED, NULL);
 	ArmAvoidThread = CreateThread(NULL, 0, ArmAvoidFun, NULL, CREATE_SUSPENDED, NULL);
 }
@@ -317,7 +475,7 @@ void main
 		//等待并接收客户端的连接请求
 		//accept返回一个相当于当前这个新连接的一个套接字描述符，保存于sockConn，然后利用这个套接字与客户端通信
 		SOCKET sockConn = accept(sockSrv, (SOCKADDR*)&addrClient, &len);
-		sendDatasThread = CreateThread(NULL, 0, SendDatas, (LPVOID)sockConn, 0, NULL);
+		SendDatasThread = CreateThread(NULL, 0, SendDatas, (LPVOID)sockConn, 0, NULL);
 		printf("Accept client connect.\n");
 
 		while (true)
@@ -373,5 +531,5 @@ void main
 	CloseHandle(ArmMotionThread);
 	CloseHandle(MobileRobotAviodThread);
 	CloseHandle(ArmAvoidThread);
-	CloseHandle(sendDatasThread);
+	CloseHandle(SendDatasThread);
 }
