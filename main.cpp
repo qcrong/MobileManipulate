@@ -140,151 +140,192 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 	MmVisualServoAlgorithm visualServoAlgorithm;
 //	while (ArmMotionFlag == 0)
 //	{
-		//try
-		//{
-		//	vpCameraParameters cam(1017.13738, 1016.70876, 332.59991, 238.92479); //摄像相机内参数px py u0 v0
-		//	vpHomogeneousMatrix eMc;//手到眼的齐次变换矩阵
-		//	eMc[0][0] = 0.02392906951946957;
-		//	eMc[0][1] = -0.9996695279615721;
-		//	eMc[0][2] = -0.009393321937448875;
-		//	eMc[0][3] = 3.921601488734311;
-		//	eMc[1][0] = -0.9978755364802699;
-		//	eMc[1][1] = -0.02445353703931933;
-		//	eMc[1][2] = 0.06038574517616292;
-		//	eMc[1][3] = 71.88804515813692;
-		//	eMc[2][0] = -0.0605954893217822;
-		//	eMc[2][1] = 0.007928391473358304;
-		//	eMc[2][2] = -0.9981309169054426;
-		//	eMc[2][3] = -7.847588857483204;
+		try
+		{
+			vpCameraParameters cam(1017.13738, 1016.70876, 332.59991, 238.92479); //摄像相机内参数px py u0 v0
+			visualServoAlgorithm.vsToOpencvCamIntriPar(cam);				//摄像机内参数转换到OpenCV格式下
+			cout << visualServoAlgorithm.cam_intrinsic_matrix << endl << endl;
+			double camDistortion[5] = { -0.4034783300939766, 0.6235344618772364, -0.0003784404964069526, -0.0006034915824095659, -1.59162547482239 };	//摄像机畸变参数
+			visualServoAlgorithm.setCamDistortion(camDistortion);
+			cout << visualServoAlgorithm.cam_distortion_matrix << endl;
+			vpHomogeneousMatrix eMc;	//手到眼的齐次变换矩阵
+			eMc[0][0] = 0.02392906951946957;
+			eMc[0][1] = -0.9996695279615721;
+			eMc[0][2] = -0.009393321937448875;
+			eMc[0][3] = 3.921601488734311;
+			eMc[1][0] = -0.9978755364802699;
+			eMc[1][1] = -0.02445353703931933;
+			eMc[1][2] = 0.06038574517616292;
+			eMc[1][3] = 71.88804515813692;
+			eMc[2][0] = -0.0605954893217822;
+			eMc[2][1] = 0.007928391473358304;
+			eMc[2][2] = -0.9981309169054426;
+			eMc[2][3] = -7.847588857483204;
 
-		//	//目标物坐标系下特征点的坐标VISP
-		//	vector<vpPoint> point;
-		//	point.push_back(vpPoint(-0.05, -0.05, 0));
-		//	point.push_back(vpPoint( 0.05, -0.05, 0));
-		//	point.push_back(vpPoint( 0.05,  0.05, 0));
-		//	point.push_back(vpPoint(-0.05,  0.05, 0));
-		//	//目标物坐标系下特征点的坐标OpenCV,用于solvePnP
-		//	vector<Point3f> point3D;
-		//	point3D.push_back(Point3f(-0.05, -0.05, 0));
-		//	point3D.push_back(Point3f( 0.05, -0.05, 0));
-		//	point3D.push_back(Point3f( 0.05,  0.05, 0));
-		//	point3D.push_back(Point3f(-0.05,  0.05, 0));
-		//	//像素坐标系下特征点的坐标OpenCV,用于solvePnP
-		//	vector<Point2f> point2D;
+			//目标物坐标系下特征点的坐标VISP
+			vector<vpPoint> point;
+			point.push_back(vpPoint(-0.05, -0.05, 0));
+			point.push_back(vpPoint( 0.05, -0.05, 0));
+			point.push_back(vpPoint( 0.05,  0.05, 0));
+			point.push_back(vpPoint(-0.05,  0.05, 0));
+			//目标物坐标系下特征点的坐标OpenCV,用于solvePnP
+			vector<Point3f> point3D;
+			point3D.push_back(Point3f(-0.05, -0.05, 0));
+			point3D.push_back(Point3f( 0.05, -0.05, 0));
+			point3D.push_back(Point3f( 0.05,  0.05, 0));
+			point3D.push_back(Point3f(-0.05,  0.05, 0));
+			vpHomogeneousMatrix cdMo, cMo;  //理想和当前相机坐标系到目标坐标系的其次变换矩阵
 
-		//	vpServo task;
-		//	task.setServo(vpServo::EYEINHAND_CAMERA);
-		//	task.setForceInteractionMatrixComputation(vpServo::CURRENT);	//使用当前点的深度信息
-		//	task.setLambda(0.5);    //系数
+			vpServo task;
+			task.setServo(vpServo::EYEINHAND_CAMERA);
+			task.setForceInteractionMatrixComputation(vpServo::CURRENT);	//使用当前点的深度信息
+			task.setLambda(0.5);    //系数
 
-		//	//获取图像
-		//	MmVisualServoBase baslerCam;	//相机类
-		//	vpImage<unsigned char> currentImage;		//当前灰度图像
-		//	baslerCam.baslerOpen(currentImage);		//打开相机
-		//	//如果打开失败
+			//获取图像
+			MmVisualServoBase baslerCam;	//相机类
+			vpImage<unsigned char> currentImage;		//当前灰度图像
+			Mat img;
+//			Pylon::PylonAutoInitTerm autoInitTerm;
+			baslerCam.baslerOpen(currentImage);		//打开相机
+			//如果打开失败
+			baslerCam.acquireBaslerImg(currentImage);
+//			namedWindow("img");
+//			imshow("img", img);
+//			waitKey(3000);
 
-		//	vpFeaturePoint p[4], pd[4];		//当前和理想4个特征点坐标
-		//	vector<vpDot2> desireDot(4), currentDot(4);			//理想和当前的4个色块
+//			baslerCam.close();
+//			return 1;
 
-		//	enum { DETECTION = 0, DESIRE = 1, CURRENT = 2, TRACKING = 3 };
-		//	int mode = DETECTION;
-		//	string msg = "Press 'd' to start get 4 desire feature points";		//图片上显示的提示信息
-		//	int key;	//按键值
+			vpFeaturePoint p[4], pd[4];		//当前和理想4个特征点坐标
+			vector<vpDot2> desireDot(4), currentDot(4);			//理想和当前的4个色块
 
-		//	vpDisplayOpenCV d(currentImage, 0, 0, "Current camera image");
-		//	while (1)//ArmMotionFlag == 0
-		//	{
-		//		baslerCam.acquireBaslerImg(currentImage);
+			enum { DETECTION = 0, DESIRE = 1, CURRENT = 2, TRACKING = 3 };
+			int mode = DETECTION;
+			string msg = "Press 'd' to start get 4 desire feature points";		//图片上显示的提示信息
+			int key;	//按键值
 
-		//		key = 0xff & waitKey(100);
-		//		if (key == 'd')
-		//		{
-		//			mode = DESIRE;
-		//		}
-		//		if (key == 'c')
-		//		{
-		//			mode = CURRENT;
-		//		}
-		//		if ((key & 255) == 27)   //  退出键
-		//		{
-		//			break;
-		//		}
+			vpDisplayOpenCV d(currentImage, 0, 0, "Current camera image");
+			while (1)//ArmMotionFlag == 0
+			{
+				baslerCam.acquireBaslerImg(currentImage);
 
-		//		if (mode == DETECTION)
-		//		{
-		//			vpDisplay::display(currentImage);
-		//			vpDisplay::displayText(currentImage, 10, 10, msg, vpColor::red);
-		//			vpDisplay::flush(currentImage);		//显示图像
-		//			
-		//		}
-		//		if (mode == DESIRE)
-		//		{
-		//			vpDisplay::display(currentImage);
-		//			vpDisplay::displayText(currentImage, 10, 10, "Click in the 4 dots to initialize the desire feature points", vpColor::red);
-		//			vpDisplay::flush(currentImage);		//显示图像
+				key = 0xff & waitKey(30);
+				if (key == 'd')
+				{
+					mode = DESIRE;
+				}
+				if (key == 'c')
+				{
+					mode = CURRENT;
+				}
+				if ((key & 255) == 27)   //  esc退出键
+				{
+					break;
+				}
 
-		//			//理想位置特征记录
-		//			vpImagePoint dot;
-		//			for (unsigned int i = 0; i < 4; i++)
-		//			{
-		//				desireDot[i].setGraphics(true);
-		//				desireDot[i].initTracking(currentImage);
-		//				vpDisplay::flush(currentImage);
-		//				//vpFeatureBuilder::create(pd[i], cam, desireDot[i].getCog());		//获取色块重心图像坐标，这里没有深度信息
-		//				visualServoAlgorithm.pixelToImage(pd[i], cam, desireDot[i].getCog());
-		//				dot = desireDot[i].getCog();
-		//				cout << "pd" << i << ": " << pd[i].get_x() << "  " << pd[i].get_y() << endl;
-		//				cout << "dot" << i << ": " << dot.get_u() << "  " << dot.get_v() << endl;
-		//			}
+				if (mode == DETECTION)
+				{
+					vpDisplay::display(currentImage);
+					vpDisplay::displayText(currentImage, 10, 10, msg, vpColor::red);
+					vpDisplay::flush(currentImage);		//显示图像
+				}
+				if (mode == DESIRE)
+				{
+					vpDisplay::display(currentImage);
+					vpDisplay::displayText(currentImage, 10, 10, "Click in the 4 dots to initialize the desire feature points", vpColor::red);
+					vpDisplay::flush(currentImage);		//显示图像
 
-		//			//solvePnP求解cdMo
+					//理想位置特征记录
+					//像素坐标系下特征点的坐标OpenCV,用于solvePnP
+					vector<Point2f> point2D;
+					for (unsigned int i = 0; i < 4; i++)
+					{
+						desireDot[i].setGraphics(true);
+						desireDot[i].initTracking(currentImage);
+						vpDisplay::flush(currentImage);
+						vpImagePoint dot;
+						dot = desireDot[i].getCog();
+						//vpFeatureBuilder::create(pd[i], cam, desireDot[i].getCog());		//获取色块重心图像坐标，这里没有深度信息
+						visualServoAlgorithm.pixelToImage(pd[i], cam, dot);		//获取色块重心图像坐标单位是米，这里没有深度信息
+						//dot = desireDot[i].getCog();
+						//cout << "pd" << i << ": " << pd[i].get_x() << "  " << pd[i].get_y() << endl;
+						//cout << "dot" << i << ": " << dot.get_u() << "  " << dot.get_v() << endl;
+						point2D.push_back(cv::Point2f(dot.get_u(), dot.get_v()));
+					}
+					//solvePnP求解cdMo
+					Mat rvec = Mat::zeros(3, 1, CV_64FC1); //旋转向量
+					Mat rM; //旋转矩阵
+					Mat tvec;//平移向量
+					solvePnP(point3D, point2D, visualServoAlgorithm.cam_intrinsic_matrix, visualServoAlgorithm.cam_distortion_matrix, rvec, tvec, false, CV_ITERATIVE);
+					Rodrigues(rvec, rM);
+					cout << "旋转矩阵:" << endl;
+					cout << rM << endl;
+					cout << "平移向量:" << endl;
+					cout << tvec << endl;
+					visualServoAlgorithm.setvpHomogeneousMatrix(cdMo, rM, tvec);
+					cout << "理想位置其次变换矩阵:" << endl;
+					cout << cdMo << endl;
+
+					//返回刷图模式，等待按键c
+					mode = DETECTION;
+					msg = "Press 'c' to start get 4 current feature points";
+				}
+				if (mode == CURRENT)
+				{
+					vpDisplay::display(currentImage);
+					vpDisplay::displayText(currentImage, 10, 10, "Click in the 4 dots to initialize the current feature points", vpColor::red);
+					vpDisplay::flush(currentImage);		//显示图像
+
+					//理想位置特征记录
+					vector<Point2f> point2D;
+					for (unsigned int i = 0; i < 4; i++)
+					{
+						currentDot[i].setGraphics(true);
+						currentDot[i].initTracking(currentImage);
+						vpDisplay::flush(currentImage);
+						vpImagePoint dot;
+						dot = desireDot[i].getCog();
+						visualServoAlgorithm.pixelToImage(p[i], cam, dot);
+						point2D.push_back(cv::Point2f(dot.get_u(), dot.get_v()));
+					}
+					Mat rvec = Mat::zeros(3, 1, CV_64FC1); //旋转向量
+					Mat rM; //旋转矩阵
+					Mat tvec;//平移向量
+					solvePnP(point3D, point2D, visualServoAlgorithm.cam_intrinsic_matrix, visualServoAlgorithm.cam_distortion_matrix, rvec, tvec, false, CV_ITERATIVE);
+					Rodrigues(rvec, rM);
+					cout << "旋转矩阵:" << endl;
+					cout << rM << endl;
+					cout << "平移向量:" << endl;
+					cout << tvec << endl;
+					visualServoAlgorithm.setvpHomogeneousMatrix(cMo, rM, tvec);
+					cout << "理想位置其次变换矩阵:" << endl;
+					cout << cMo << endl;
+
+					for (unsigned int i = 0; i < 4; i++)
+					{
+						task.addFeature(p[i], pd[i]);
+					}
+					mode = DETECTION;
+				}
+				if (mode == TRACKING)
+				{
+
+				}
+				
+			}
+			baslerCam.close();
+
+			
+
+			
+
+			
 
 
-
-		//			//返回刷图模式，等待按键c
-		//			mode = DETECTION;
-		//			msg = "Press 'c' to start get 4 current feature points";
-		//		}
-		//		if (mode = CURRENT)
-		//		{
-		//			vpDisplay::display(currentImage);
-		//			vpDisplay::displayText(currentImage, 10, 10, "Click in the 4 dots to initialize the current feature points", vpColor::red);
-		//			vpDisplay::flush(currentImage);		//显示图像
-
-		//			//理想位置特征记录
-		//			for (unsigned int i = 0; i < 4; i++)
-		//			{
-		//				currentDot[i].setGraphics(true);
-		//				currentDot[i].initTracking(currentImage);
-		//				vpDisplay::flush(currentImage);
-		//				//vpFeatureBuilder::create(p[i], cam, currentDot[i].getCog());		//获取色块重心图像坐标，这里没有深度信息
-		//				visualServoAlgorithm.pixelToImage(p[i], cam, currentDot[i].getCog());
-		//			}
-		//			for (unsigned int i = 0; i < 4; i++)
-		//			{
-		//				task.addFeature(p[i], pd[i]);
-		//			}
-		//			mode = TRACKING;
-		//		}
-		//		if (mode == TRACKING)
-		//		{
-
-		//		}
-		//		
-		//	}
-		//	baslerCam.close();
-
-		//	
-
-		//	
-
-		//	
-
-
-		//}
-		//catch (vpException &e) {
-		//	std::cout << "Catch an exception: " << e << std::endl;
-		//}
+		}
+		catch (vpException &e) {
+			std::cout << "Catch an exception: " << e << std::endl;
+		}
 
 
 //	}
