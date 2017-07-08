@@ -30,16 +30,16 @@ add_executable(MobileManipulate
    MmArmBase.h
    MmAvoidObstacle.cpp
    MmAvoidObstacle.h
+   MmData.cpp
+   MmData.h
    MmMobileRobotBase.cpp
    MmMobileRobotBase.h
-   MmPose.cpp
-   MmPose.h
    MmRFIDAlgorithm.cpp 
    MmRFIDAlgorithm.h      
    MmRFIDBase.cpp
    MmRFIDBase.h           
-   MmSocketServer.cpp  
-   MmSocketServer.h
+   MmSocketSrv.cpp
+   MmSocketSrv.h
    MmVisualServoAlgorithm.cpp   
    MmVisualServoAlgorithm.h
    MmVisualServoBase.cpp

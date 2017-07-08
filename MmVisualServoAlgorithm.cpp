@@ -152,3 +152,12 @@ int MmVisualServoAlgorithm::coPlanarity4PointSolvePnP(const Mat &grayImage, cons
 	cout << tvec << endl;
 	return true;
 }
+
+void  MmVisualServoAlgorithm::pixelToImage(vpFeaturePoint &s, const vpCameraParameters &cam, const vpImagePoint &t)
+{
+	double x = 0, y = 0;
+	x = (t.get_u() - cam.get_u0()) / cam.get_px();
+	y = (t.get_v() - cam.get_v0()) / cam.get_py();
+	s.set_x(x);
+	s.set_y(y);
+}
