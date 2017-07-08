@@ -163,19 +163,15 @@ void  MmVisualServoAlgorithm::pixelToImage(vpFeaturePoint &s, const vpCameraPara
 }
 
 //VISP中4参数相机内参数vpCameraParameters转OpenCV中的9参数相机内参数
-void MmVisualServoAlgorithm::vsToOpencvCamIntriPar(const vpCameraParameters &cam)
+void MmVisualServoAlgorithm::setCamIntrinsic(double camIntrinsic[9])
 {
-	cam_intrinsic_matrix.at<float>(0, 0) = cam.get_px();
-	cam_intrinsic_matrix.at<float>(1, 1) = cam.get_py();
-	cam_intrinsic_matrix.at<float>(0, 2) = cam.get_u0();
-	cam_intrinsic_matrix.at<float>(1, 2) = cam.get_v0();
-	cam_intrinsic_matrix.at<float>(2, 2) = 1.0;
+	cam_intrinsic_matrix = Mat(3, 3, CV_64FC1, camIntrinsic);
 }
 
 //设置相机畸变参数cam_Distortion_matrix的值
 void MmVisualServoAlgorithm::setCamDistortion (double camDistortion[5])
 {
-	cam_distortion_matrix = cv::Mat(5, 1, CV_64FC1, camDistortion);
+	cam_distortion_matrix = Mat(5, 1, CV_64FC1, camDistortion);
 }
 
 //设置由OpenCV中Mat格式的旋转矩阵和平移矩阵设置VISP齐次变换矩阵
@@ -192,7 +188,7 @@ void MmVisualServoAlgorithm::setvpHomogeneousMatrix(vpHomogeneousMatrix &outM, c
 	//设置平移矩阵
 	for (int i = 0; i < 3; i++)
 	{
-		outM[i][3] = rM.at<double>(i, 3);
+		outM[i][3] = tM.at<double>(0, i);
 	}
 	//齐次项
 	for (int j = 0; j < 3; j++)

@@ -33,7 +33,7 @@ public:
 	//实现VISP中的 vpFeatureBuilder::create (vpFeaturePoint &s, const vpCameraParameters &cam, const vpDot2 &d)功能
 	void pixelToImage(vpFeaturePoint &s, const vpCameraParameters &cam, const vpImagePoint &t);
 	//VISP中4参数相机内参数vpCameraParameters转OpenCV中的9参数相机内参数cam_intrinsic_matrix
-	void vsToOpencvCamIntriPar(const vpCameraParameters &cam);
+	void setCamIntrinsic(double camIntrinsic[9]);
 	//设置相机畸变参数cam_Distortion_matrix的值
 	void setCamDistortion( double camDistortion[5]);
 	//设置由OpenCV中Mat格式的3X3旋转矩阵和3X1平移矩阵设置VISP齐次变换矩阵
@@ -42,10 +42,10 @@ public:
 
 public:
 	//摄像机内参数
-	Mat cam_intrinsic_matrix = Mat::zeros(3, 3, CV_64FC1);
+	Mat cam_intrinsic_matrix = Mat(3, 3, CV_64FC1);
 	double camIntrinsicParam[9];
 	//摄像机畸变参数
-	Mat cam_distortion_matrix = Mat::zeros(5, 1, CV_64FC1);
+	Mat cam_distortion_matrix = Mat(5, 1, CV_64FC1);
 	double camDistortionParam[5];
 
 private:

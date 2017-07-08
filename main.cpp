@@ -143,7 +143,10 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 		try
 		{
 			vpCameraParameters cam(1017.13738, 1016.70876, 332.59991, 238.92479); //摄像相机内参数px py u0 v0
-			visualServoAlgorithm.vsToOpencvCamIntriPar(cam);				//摄像机内参数转换到OpenCV格式下
+			double camIntrinsic[9] = { 1017.13738, 0, 332.59991,
+				0, 1016.70876, 238.92479,
+				0, 0, 1 };
+			visualServoAlgorithm.setCamIntrinsic(camIntrinsic);				//摄像机内参数转换到OpenCV格式下
 			cout << visualServoAlgorithm.cam_intrinsic_matrix << endl << endl;
 			double camDistortion[5] = { -0.4034783300939766, 0.6235344618772364, -0.0003784404964069526, -0.0006034915824095659, -1.59162547482239 };	//摄像机畸变参数
 			visualServoAlgorithm.setCamDistortion(camDistortion);
@@ -162,18 +165,18 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 			eMc[2][2] = -0.9981309169054426;
 			eMc[2][3] = -7.847588857483204;
 
-			//目标物坐标系下特征点的坐标VISP
+			//目标物坐标系下特征点的坐标VISP,单位m
 			vector<vpPoint> point;
 			point.push_back(vpPoint(-0.05, -0.05, 0));
 			point.push_back(vpPoint( 0.05, -0.05, 0));
 			point.push_back(vpPoint( 0.05,  0.05, 0));
 			point.push_back(vpPoint(-0.05,  0.05, 0));
-			//目标物坐标系下特征点的坐标OpenCV,用于solvePnP
+			//目标物坐标系下特征点的坐标OpenCV,用于solvePnP，单位mm
 			vector<Point3f> point3D;
-			point3D.push_back(Point3f(-0.05, -0.05, 0));
-			point3D.push_back(Point3f( 0.05, -0.05, 0));
-			point3D.push_back(Point3f( 0.05,  0.05, 0));
-			point3D.push_back(Point3f(-0.05,  0.05, 0));
+			point3D.push_back(Point3f(-50, -50, 0));
+			point3D.push_back(Point3f( 50, -50, 0));
+			point3D.push_back(Point3f( 50,  50, 0));
+			point3D.push_back(Point3f(-50,  50, 0));
 			vpHomogeneousMatrix cdMo, cMo;  //理想和当前相机坐标系到目标坐标系的其次变换矩阵
 
 			vpServo task;
@@ -249,8 +252,9 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 						visualServoAlgorithm.pixelToImage(pd[i], cam, dot);		//获取色块重心图像坐标单位是米，这里没有深度信息
 						//dot = desireDot[i].getCog();
 						//cout << "pd" << i << ": " << pd[i].get_x() << "  " << pd[i].get_y() << endl;
-						//cout << "dot" << i << ": " << dot.get_u() << "  " << dot.get_v() << endl;
+						cout << "dot" << i << ": " << dot.get_u() << "  " << dot.get_v() << endl;
 						point2D.push_back(cv::Point2f(dot.get_u(), dot.get_v()));
+						cout << "point2D " << point2D[i] << endl;
 					}
 					//solvePnP求解cdMo
 					Mat rvec = Mat::zeros(3, 1, CV_64FC1); //旋转向量
@@ -284,7 +288,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 						currentDot[i].initTracking(currentImage);
 						vpDisplay::flush(currentImage);
 						vpImagePoint dot;
-						dot = desireDot[i].getCog();
+						dot = currentDot[i].getCog();
 						visualServoAlgorithm.pixelToImage(p[i], cam, dot);
 						point2D.push_back(cv::Point2f(dot.get_u(), dot.get_v()));
 					}
@@ -298,7 +302,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 					cout << "平移向量:" << endl;
 					cout << tvec << endl;
 					visualServoAlgorithm.setvpHomogeneousMatrix(cMo, rM, tvec);
-					cout << "理想位置其次变换矩阵:" << endl;
+					cout << "当前位置其次变换矩阵:" << endl;
 					cout << cMo << endl;
 
 					for (unsigned int i = 0; i < 4; i++)
