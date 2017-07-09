@@ -38,7 +38,7 @@ volatile int ThreadsExitFlag = 0;
 //机械臂和相机线程的同步控制标志位，相机运动到位时置1，相机处理完成置2
 volatile int armCamFlag = 0;
 //视觉计算出来的机械臂末端运动速度
-VectorXd Ve;
+VectorXd Ve(6);
 
 //使用关键代码段进行线程间同步
 CRITICAL_SECTION thread_cs;
@@ -82,9 +82,9 @@ DWORD WINAPI RFIDNavigationFun(LPVOID lpParameter)
 	else
 	{
 		//避障线程结束标志位置1，避障线程退出
-		EnterCriticalSection(&thread_cs);
+		//EnterCriticalSection(&thread_cs);
 		VisualNavigationFlag = 1;
-		LeaveCriticalSection(&thread_cs);
+		//LeaveCriticalSection(&thread_cs);
 	}
 
 	return 0;
@@ -108,9 +108,9 @@ DWORD WINAPI VisualNavigationFun(LPVOID lpParameter)
 	}
 
 	//避障线程结束标志位置1，避障线程退出
-	EnterCriticalSection(&thread_cs);
+	//EnterCriticalSection(&thread_cs);
 	VisualNavigationFlag = 1;
-	LeaveCriticalSection(&thread_cs);
+	//LeaveCriticalSection(&thread_cs);
 
 	return 0;
 }
@@ -163,16 +163,16 @@ DWORD WINAPI ArmMotionFun(LPVOID lpParameter)
 		{
 			cytonCommands.closeNetwork();
 			cout << "9. ArmMotionThread has finished." << endl;
-			EnterCriticalSection(&thread_cs);
+			//EnterCriticalSection(&thread_cs);
 			ArmMotionFlag = 1;
-			LeaveCriticalSection(&thread_cs);
+			//LeaveCriticalSection(&thread_cs);
 			return 1;
 		}
 	}
 
 	cout << "运动到当前位姿" << endl;
 	relaTransform.set(0.01, 0.0, 0.0);		//XYZ平移向量
-	relaOriention.setFrom321Euler(-EcPi / 12, 0, 0);    //绕Z-Y-X欧拉角对当前末端手爪姿态进行旋转
+	relaOriention.setFrom321Euler(-EcPi / 36, 0, 0);    //绕Z-Y-X欧拉角对当前末端手爪姿态进行旋转
 	relativetrans.outboardTransformBy(relaTransform, relaOriention);
 	RC_CHECK(cytonCommands.frameMovementExample(desiredPose * relativetrans));
 	EcSLEEPMS(1000);
@@ -186,23 +186,27 @@ DWORD WINAPI ArmMotionFun(LPVOID lpParameter)
 		{
 			cytonCommands.closeNetwork();
 			cout << "9. ArmMotionThread has finished." << endl;
-			EnterCriticalSection(&thread_cs);
+			//EnterCriticalSection(&thread_cs);
 			ArmMotionFlag = 1;
-			LeaveCriticalSection(&thread_cs);
+			//LeaveCriticalSection(&thread_cs);
 			return 1;
 		}
 	}
 
 	//机械臂末端运动速度初始化
-	for (unsigned int i = 0; i < 6; i++)
-	{
-		Ve(i) = 0.0;
-	}
+	//for (unsigned int i = 0; i < 6; ++i)
+	//{
+		EnterCriticalSection(&thread_cs);
+		Ve << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
+		LeaveCriticalSection(&thread_cs);		
+	//}
 	cout << "机械臂位姿调整开始" << endl;
-	while (ThreadsExitFlag != NAVIGATIONSTOP || ArmMotionFlag != 5)
+	while (ThreadsExitFlag != NAVIGATIONSTOP && armCamFlag != 5)
 	{
 
 		cytonCommands.SetEEVelocity(Ve);
+		cout << Ve << endl;
+		//break;
 
 	}
 
@@ -213,9 +217,9 @@ DWORD WINAPI ArmMotionFun(LPVOID lpParameter)
 	cytonCommands.closeNetwork();
 	cout << "9. ArmMotionThread has finished." << endl;
 	//线程结束标志位置1
-	EnterCriticalSection(&thread_cs);
+	//EnterCriticalSection(&thread_cs);
 	ArmMotionFlag = 1;
-	LeaveCriticalSection(&thread_cs);
+	//LeaveCriticalSection(&thread_cs);
 	return 0;
 }
 
@@ -270,7 +274,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 		task.setServo(vpServo::EYEINHAND_CAMERA);
 		task.setForceInteractionMatrixComputation(vpServo::CURRENT);	//使用当前点的深度信息
 		task.setLambda(0.5);    //系数
-		task.set_cVe(cMe);		//设置手眼坐标关系，使task计算出来的速度为机械臂末端速度
+//		task.set_cVe(cMe);		//设置手眼坐标关系，使task计算出来的速度为机械臂末端速度
 
 		//获取图像
 		MmVisualServoBase baslerCam;	//相机类
@@ -459,8 +463,9 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 					//cout << vpeV << endl;
 					for (unsigned int i = 0; i < 6; i++)
 					{
-						//cout << "vpeV" << i << ": " << vpeV[i] << endl;
+						EnterCriticalSection(&thread_cs);
 						Ve(i) = vpeV[i];
+						LeaveCriticalSection(&thread_cs);					
 					}
 					visualServoAlgorithm.display_trajectory(currentImage, currentDot);
 					vpServoDisplay::display(task, cam, currentImage, vpColor::green, vpColor::red);	//绘制特征点的当前位置和理想位置
