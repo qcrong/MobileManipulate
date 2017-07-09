@@ -140,24 +140,32 @@ DWORD WINAPI ArmMotionFun(LPVOID lpParameter)
 		cout << "理想位姿" << endl;
 		jointposition[1] = EcPi / 180 * 90;
 		jointposition[3] = -EcPi / 180 * 90;
-		jointposition[5] = EcPi / 180 * 4;
 		RC_CHECK(cytonCommands.MoveJointsExample(jointposition, .000001));
 		//从关节角控制切换到位姿控制，对当前位姿进行初始化
 		EcCoordinateSystemTransformation desiredPose;
 		cytonCommands.changeToFrameEE(desiredPose);
 		EcSLEEPMS(10000);
-		EcVector relaTransform(0.0, 0.0, -0.03);		//相对于当前手爪末端坐标系XYZ的平移量
+		EcVector relaTransform(-0.02, 0.0, 0.0);		//相对于当前手爪末端坐标系XYZ的平移量
 		EcOrientation relaOriention;            //相对于当前手爪末端坐标系Z-Y-X的旋转量
 		relaOriention.setFrom321Euler(0, 0, 0);    //绕Z-Y-X欧拉角对当前末端手爪姿态进行旋转
 		EcCoordinateSystemTransformation relativetrans(relaTransform, relaOriention);		//设置平移旋转量
 		RC_CHECK(cytonCommands.frameMovementExample(desiredPose * relativetrans));
-		EcSLEEPMS(2000);
+		EcSLEEPMS(1000);
 		armCamFlag = 1;    //相机运动到理想位姿
 		
 		//等待相机获取理想位姿信息
 		while (armCamFlag!=2)
 		{
 			Sleep(100);
+			if (ThreadsExitFlag == NAVIGATIONSTOP)
+			{
+				cytonCommands.closeNetwork();
+				cout << "9. ArmMotionThread has finished." << endl;
+				EnterCriticalSection(&thread_cs);
+				ArmMotionFlag = 1;
+				LeaveCriticalSection(&thread_cs);
+				return 1;
+			}
 		}
 
 		cout << "运动到当前位姿" << endl;
@@ -165,13 +173,22 @@ DWORD WINAPI ArmMotionFun(LPVOID lpParameter)
 		relaOriention.setFrom321Euler(-EcPi / 12, 0, 0);    //绕Z-Y-X欧拉角对当前末端手爪姿态进行旋转
 		relativetrans.outboardTransformBy(relaTransform, relaOriention);
 		RC_CHECK(cytonCommands.frameMovementExample(desiredPose * relativetrans));
-		EcSLEEPMS(2000);
+		EcSLEEPMS(1000);
 		armCamFlag = 3;    //相机运动到当前位姿
 
 		//等待相机获取当前位姿信息
 		while (armCamFlag != 4)
 		{
 			Sleep(100);
+			if (ThreadsExitFlag == NAVIGATIONSTOP)
+			{
+				cytonCommands.closeNetwork();
+				cout << "9. ArmMotionThread has finished." << endl;
+				EnterCriticalSection(&thread_cs);
+				ArmMotionFlag = 1;
+				LeaveCriticalSection(&thread_cs);
+				return 1;
+			}
 		}
 
 
@@ -253,7 +270,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 			//不同模式
 			enum { DETECTION = 0, DESIRE = 1, CURRENT = 2, TRACKING = 3 };
 			int mode = DETECTION;
-			string msg = "机械臂向理想位姿运动";		//图片上显示的提示信息
+			string msg = "Arm is moving to desired place";		//图片上显示的提示信息
 			int key;	//按键值
 
 			vpDisplayOpenCV d(currentImage, 0, 0, "Current camera image");
@@ -279,11 +296,11 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 				{
 					if (armCamFlag==1)
 					{
-						msg = "机械臂到达理想位姿，按d进行特征选取";
+						msg = "Arm had arrived at desired place,press 'd' to select feature point";
 					}
 					if (armCamFlag == 3)
 					{
-						msg = "机械臂到达当前位姿，按c进行特征选取";
+						msg = "Arm had arrived at current place,press 'c' to select feature point";
 					}
 					vpDisplay::display(currentImage);
 					vpDisplay::displayText(currentImage, 10, 10, msg, vpColor::red);
@@ -292,7 +309,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 				if (mode == DESIRE)
 				{
 					vpDisplay::display(currentImage);
-					vpDisplay::displayText(currentImage, 10, 10, "选取4个色块，初始化理想特征点", vpColor::red);
+					vpDisplay::displayText(currentImage, 10, 10, "Select 4 dot to initalize the desired feature points", vpColor::red);
 					vpDisplay::flush(currentImage);		//显示图像
 
 					//理想位置特征记录
@@ -336,12 +353,12 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 					//返回刷图模式，等待按键c
 					mode = DETECTION;
 					armCamFlag = 2;   //理想特征提取完成，机械臂运动到当前位姿
-					msg = "机械臂向当前位姿运动";
+					msg = "Arm is moving to current place";
 				}
 				if (mode == CURRENT)
 				{
 					vpDisplay::display(currentImage);
-					vpDisplay::displayText(currentImage, 10, 10, "选取4个色块，初始化当前特征点", vpColor::red);
+					vpDisplay::displayText(currentImage, 10, 10, "Select 4 dot to initalize the current feature points", vpColor::red);
 					vpDisplay::flush(currentImage);		//显示图像
 
 					//理想位置特征记录
@@ -384,7 +401,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 					}
 					mode = DETECTION;
 					armCamFlag = 4;
-					msg = "开始伺服调整";
+					msg = "Start tracking";
 				}
 				if (mode == TRACKING)
 				{
