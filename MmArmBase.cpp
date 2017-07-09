@@ -685,7 +685,7 @@ EcBoolean EcCytonCommands::SetEEVelocity(VectorXd & EEVelo)
 		retVal = setDesiredVelocity(endVelo);
 
 		// 设置持续时间，到时间就停下来。实际控制时可以酌情选择
-		EcSLEEPMS(200);
+		EcSLEEPMS(100);
 		EcRealVector zeroVelo(endVelo.size());
 		retVal = setDesiredVelocity(zeroVelo);
 

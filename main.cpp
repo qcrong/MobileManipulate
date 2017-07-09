@@ -30,7 +30,7 @@
 //全局变量
 //volatile来告诉编译器这个全局变量是易变的，让编译器不要对这个变量进行优化
 //VisualNavigationThread线程运行标志位，当该线程结束时标志位置1
-volatile int VisualNavigationFlag = 0;  
+volatile int VisualNavigationFlag = 0;
 //ArmMotionThread线程运行标志位，当该线程结束时标志位置1
 volatile int ArmMotionFlag = 0;
 //客户端按下停止按钮时，ThreadsExitFlag置1，机器人线程退出
@@ -38,12 +38,12 @@ volatile int ThreadsExitFlag = 0;
 //机械臂和相机线程的同步控制标志位，相机运动到位时置1，相机处理完成置2
 volatile int armCamFlag = 0;
 //视觉计算出来的机械臂末端运动速度
-vpColVector eV;
+VectorXd Ve;
 
 //使用关键代码段进行线程间同步
-CRITICAL_SECTION thread_cs;  
+CRITICAL_SECTION thread_cs;
 //自动导航标志位，该标志位为NAVIGATIONSTART时，先后自动执行RFID导航，视觉位姿调整和机械臂抓取
-int navigationAutoflag = 0;		
+int navigationAutoflag = 0;
 
 //创建线程句柄
 HANDLE RFIDNavigationThread;		//RFID大范围导航线程
@@ -73,7 +73,7 @@ DWORD WINAPI RFIDNavigationFun(LPVOID lpParameter)
 		cout << "3. RFIDNavigationThread has finished." << endl;
 		break;
 	}
-	
+
 	//连续自动导航，启动下一环节
 	if (navigationAutoflag == NAVIGATIONSTART)
 	{
@@ -86,7 +86,7 @@ DWORD WINAPI RFIDNavigationFun(LPVOID lpParameter)
 		VisualNavigationFlag = 1;
 		LeaveCriticalSection(&thread_cs);
 	}
-	
+
 	return 0;
 }
 
@@ -106,7 +106,7 @@ DWORD WINAPI VisualNavigationFun(LPVOID lpParameter)
 		cout << "5. VisualNavigationThread has finished." << endl;
 		break;
 	}
-	
+
 	//避障线程结束标志位置1，避障线程退出
 	EnterCriticalSection(&thread_cs);
 	VisualNavigationFlag = 1;
@@ -120,91 +120,96 @@ DWORD WINAPI ArmMotionFun(LPVOID lpParameter)
 {
 	ResumeThread(ArmAvoidThread);
 	cout << "7. ArmMotionThread is running." << endl;
-//	while (ThreadsExitFlag != NAVIGATIONSTOP)
-//	{
-		//机械臂初始化
-		EcCytonCommands cytonCommands;								//实例化
-		///打开机器人远程控制
-		EcString ipAddress = "127.0.0.1";
-		EcString cytonVersion = "1500";
-		EcString cytonDir = Ec::Application::getDataDirectory("cyton");
-		if (cytonDir.empty())
+	//	while (ThreadsExitFlag != NAVIGATIONSTOP)
+	//	{
+	//机械臂初始化
+	EcCytonCommands cytonCommands;								//实例化
+	///打开机器人远程控制
+	EcString ipAddress = "127.0.0.1";
+	EcString cytonVersion = "1500";
+	EcString cytonDir = Ec::Application::getDataDirectory("cyton");
+	if (cytonDir.empty())
+	{
+		cytonDir = ".";
+	}
+	cytonCommands.openNetwork(ipAddress);
+
+	//标定初始化，调整机械臂到初始位置
+	EcRealVector jointposition(7);		//用于机械臂位姿控制
+	jointposition.resize(7);		//机械臂回到垂直位置
+	RC_CHECK(cytonCommands.MoveJointsExample(jointposition, 0.000001));
+
+	cout << "理想位姿" << endl;
+	jointposition[1] = EcPi / 180 * 90;
+	jointposition[3] = -EcPi / 180 * 90;
+	RC_CHECK(cytonCommands.MoveJointsExample(jointposition, .000001));
+	//从关节角控制切换到位姿控制，对当前位姿进行初始化
+	EcCoordinateSystemTransformation desiredPose;
+	cytonCommands.changeToFrameEE(desiredPose);
+	EcSLEEPMS(10000);
+	EcVector relaTransform(-0.02, 0.0, 0.0);		//相对于当前手爪末端坐标系XYZ的平移量
+	EcOrientation relaOriention;            //相对于当前手爪末端坐标系Z-Y-X的旋转量
+	relaOriention.setFrom321Euler(0, 0, 0);    //绕Z-Y-X欧拉角对当前末端手爪姿态进行旋转
+	EcCoordinateSystemTransformation relativetrans(relaTransform, relaOriention);		//设置平移旋转量
+	RC_CHECK(cytonCommands.frameMovementExample(desiredPose * relativetrans));
+	EcSLEEPMS(1000);
+	armCamFlag = 1;    //相机运动到理想位姿
+
+	//等待相机获取理想位姿信息
+	while (armCamFlag != 2)
+	{
+		Sleep(100);
+		if (ThreadsExitFlag == NAVIGATIONSTOP)
 		{
-			cytonDir = ".";
+			cytonCommands.closeNetwork();
+			cout << "9. ArmMotionThread has finished." << endl;
+			EnterCriticalSection(&thread_cs);
+			ArmMotionFlag = 1;
+			LeaveCriticalSection(&thread_cs);
+			return 1;
 		}
-		cytonCommands.openNetwork(ipAddress);
+	}
 
-		//标定初始化，调整机械臂到初始位置
-		EcRealVector jointposition(7);		//用于机械臂位姿控制
-		jointposition.resize(7);		//机械臂回到垂直位置
-		RC_CHECK(cytonCommands.MoveJointsExample(jointposition, 0.000001));
+	cout << "运动到当前位姿" << endl;
+	relaTransform.set(0.01, 0.0, 0.0);		//XYZ平移向量
+	relaOriention.setFrom321Euler(-EcPi / 12, 0, 0);    //绕Z-Y-X欧拉角对当前末端手爪姿态进行旋转
+	relativetrans.outboardTransformBy(relaTransform, relaOriention);
+	RC_CHECK(cytonCommands.frameMovementExample(desiredPose * relativetrans));
+	EcSLEEPMS(1000);
+	armCamFlag = 3;    //相机运动到当前位姿
 
-		cout << "理想位姿" << endl;
-		jointposition[1] = EcPi / 180 * 90;
-		jointposition[3] = -EcPi / 180 * 90;
-		RC_CHECK(cytonCommands.MoveJointsExample(jointposition, .000001));
-		//从关节角控制切换到位姿控制，对当前位姿进行初始化
-		EcCoordinateSystemTransformation desiredPose;
-		cytonCommands.changeToFrameEE(desiredPose);
-		EcSLEEPMS(10000);
-		EcVector relaTransform(-0.02, 0.0, 0.0);		//相对于当前手爪末端坐标系XYZ的平移量
-		EcOrientation relaOriention;            //相对于当前手爪末端坐标系Z-Y-X的旋转量
-		relaOriention.setFrom321Euler(0, 0, 0);    //绕Z-Y-X欧拉角对当前末端手爪姿态进行旋转
-		EcCoordinateSystemTransformation relativetrans(relaTransform, relaOriention);		//设置平移旋转量
-		RC_CHECK(cytonCommands.frameMovementExample(desiredPose * relativetrans));
-		EcSLEEPMS(1000);
-		armCamFlag = 1;    //相机运动到理想位姿
-		
-		//等待相机获取理想位姿信息
-		while (armCamFlag!=2)
+	//等待相机获取当前位姿信息
+	while (armCamFlag != 4)
+	{
+		Sleep(100);
+		if (ThreadsExitFlag == NAVIGATIONSTOP)
 		{
-			Sleep(100);
-			if (ThreadsExitFlag == NAVIGATIONSTOP)
-			{
-				cytonCommands.closeNetwork();
-				cout << "9. ArmMotionThread has finished." << endl;
-				EnterCriticalSection(&thread_cs);
-				ArmMotionFlag = 1;
-				LeaveCriticalSection(&thread_cs);
-				return 1;
-			}
+			cytonCommands.closeNetwork();
+			cout << "9. ArmMotionThread has finished." << endl;
+			EnterCriticalSection(&thread_cs);
+			ArmMotionFlag = 1;
+			LeaveCriticalSection(&thread_cs);
+			return 1;
 		}
+	}
 
-		cout << "运动到当前位姿" << endl;
-		relaTransform.set(0.01, 0.0, 0.0);		//XYZ平移向量
-		relaOriention.setFrom321Euler(-EcPi / 12, 0, 0);    //绕Z-Y-X欧拉角对当前末端手爪姿态进行旋转
-		relativetrans.outboardTransformBy(relaTransform, relaOriention);
-		RC_CHECK(cytonCommands.frameMovementExample(desiredPose * relativetrans));
-		EcSLEEPMS(1000);
-		armCamFlag = 3;    //相机运动到当前位姿
+	//机械臂末端运动速度初始化
+	for (unsigned int i = 0; i < 6; i++)
+	{
+		Ve(i) = 0.0;
+	}
+	cout << "机械臂位姿调整开始" << endl;
+	while (ThreadsExitFlag != NAVIGATIONSTOP || ArmMotionFlag != 5)
+	{
 
-		//等待相机获取当前位姿信息
-		while (armCamFlag != 4)
-		{
-			Sleep(100);
-			if (ThreadsExitFlag == NAVIGATIONSTOP)
-			{
-				cytonCommands.closeNetwork();
-				cout << "9. ArmMotionThread has finished." << endl;
-				EnterCriticalSection(&thread_cs);
-				ArmMotionFlag = 1;
-				LeaveCriticalSection(&thread_cs);
-				return 1;
-			}
-		}
+		cytonCommands.SetEEVelocity(Ve);
 
-		cout << "机械臂位姿调整开始" << endl;
-		while (ThreadsExitFlag != NAVIGATIONSTOP)
-		{
+	}
 
 
-			break;
-		}
+	//		break;
+	//	}
 
-		
-//		break;
-//	}
-	
 	cytonCommands.closeNetwork();
 	cout << "9. ArmMotionThread has finished." << endl;
 	//线程结束标志位置1
@@ -217,168 +222,213 @@ DWORD WINAPI ArmMotionFun(LPVOID lpParameter)
 //摄像机线程
 DWORD WINAPI Camera(LPVOID lpParameter)
 {
-	
+
 	cout << "9. CamThread is running." << endl;
 	MmVisualServoAlgorithm visualServoAlgorithm;
-//	while (ArmMotionFlag == 0)
-//	{
-		try
+	try
+	{
+		vpCameraParameters cam(1017.13738, 1016.70876, 332.59991, 238.92479); //摄像相机内参数px py u0 v0
+		double camIntrinsic[9] = { 1017.13738, 0, 332.59991,
+			0, 1016.70876, 238.92479,
+			0, 0, 1 };
+		visualServoAlgorithm.setCamIntrinsic(camIntrinsic);				//摄像机内参数转换到OpenCV格式下
+		cout << visualServoAlgorithm.cam_intrinsic_matrix << endl << endl;
+		double camDistortion[5] = { -0.4034783300939766, 0.6235344618772364, -0.0003784404964069526, -0.0006034915824095659, -1.59162547482239 };	//摄像机畸变参数
+		visualServoAlgorithm.setCamDistortion(camDistortion);
+		cout << visualServoAlgorithm.cam_distortion_matrix << endl;
+		vpHomogeneousMatrix cMe;	//手到眼的齐次变换矩阵
+		cMe[0][0] = 0.02392906951946957;
+		cMe[0][1] = -0.9996695279615721;
+		cMe[0][2] = -0.009393321937448875;
+		cMe[0][3] = 0.003921601488734311;
+		cMe[1][0] = -0.9978755364802699;
+		cMe[1][1] = -0.02445353703931933;
+		cMe[1][2] = 0.06038574517616292;
+		cMe[1][3] = 0.07188804515813692;
+		cMe[2][0] = -0.0605954893217822;
+		cMe[2][1] = 0.007928391473358304;
+		cMe[2][2] = -0.9981309169054426;
+		cMe[2][3] = -0.007847588857483204;
+
+
+		//目标物坐标系下特征点的坐标VISP,单位m
+		vector<vpPoint> point;
+		point.push_back(vpPoint(-0.05, -0.05, 0));
+		point.push_back(vpPoint(0.05, -0.05, 0));
+		point.push_back(vpPoint(0.05, 0.05, 0));
+		point.push_back(vpPoint(-0.05, 0.05, 0));
+		//目标物坐标系下特征点的坐标OpenCV,用于solvePnP，单位mm
+		vector<Point3f> point3D;
+		point3D.push_back(Point3f(-50, -50, 0));
+		point3D.push_back(Point3f(50, -50, 0));
+		point3D.push_back(Point3f(50, 50, 0));
+		point3D.push_back(Point3f(-50, 50, 0));
+		//理想和当前相机坐标系到目标坐标系的其次变换矩阵
+		vpHomogeneousMatrix cdMo, cMo;
+
+		vpServo task;		//视觉伺服处理
+		task.setServo(vpServo::EYEINHAND_CAMERA);
+		task.setForceInteractionMatrixComputation(vpServo::CURRENT);	//使用当前点的深度信息
+		task.setLambda(0.5);    //系数
+		task.set_cVe(cMe);		//设置手眼坐标关系，使task计算出来的速度为机械臂末端速度
+
+		//获取图像
+		MmVisualServoBase baslerCam;	//相机类
+		vpImage<unsigned char> currentImage;		//当前灰度图像
+		baslerCam.baslerOpen(currentImage);		//打开相机
+		baslerCam.acquireBaslerImg(currentImage);
+
+		vpFeaturePoint p[4], pd[4];		//当前和理想4个特征点坐标
+		vector<vpDot2> desireDot(4), currentDot(4);			//理想和当前的4个色块
+
+		//不同模式
+		enum { DETECTION = 0, DESIRE = 1, CURRENT = 2, TRACKING = 3 };
+		int mode = DETECTION;
+		string msg = "Arm is moving to desired place";		//图片上显示的提示信息
+		int key;	//按键值
+
+		vpDisplayOpenCV d(currentImage, 0, 0, "Current camera image");
+		while (1)//ArmMotionFlag == 0
 		{
-			vpCameraParameters cam(1017.13738, 1016.70876, 332.59991, 238.92479); //摄像相机内参数px py u0 v0
-			double camIntrinsic[9] = { 1017.13738, 0, 332.59991,
-				0, 1016.70876, 238.92479,
-				0, 0, 1 };
-			visualServoAlgorithm.setCamIntrinsic(camIntrinsic);				//摄像机内参数转换到OpenCV格式下
-			cout << visualServoAlgorithm.cam_intrinsic_matrix << endl << endl;
-			double camDistortion[5] = { -0.4034783300939766, 0.6235344618772364, -0.0003784404964069526, -0.0006034915824095659, -1.59162547482239 };	//摄像机畸变参数
-			visualServoAlgorithm.setCamDistortion(camDistortion);
-			cout << visualServoAlgorithm.cam_distortion_matrix << endl;
-			vpHomogeneousMatrix cMe;	//手到眼的齐次变换矩阵
-			cMe[0][0] = 0.02392906951946957;
-			cMe[0][1] = -0.9996695279615721;
-			cMe[0][2] = -0.009393321937448875;
-			cMe[0][3] = 0.003921601488734311;
-			cMe[1][0] = -0.9978755364802699;
-			cMe[1][1] = -0.02445353703931933;
-			cMe[1][2] = 0.06038574517616292;
-			cMe[1][3] = 0.07188804515813692;
-			cMe[2][0] = -0.0605954893217822;
-			cMe[2][1] = 0.007928391473358304;
-			cMe[2][2] = -0.9981309169054426;
-			cMe[2][3] = -0.007847588857483204;
-
-
-			//目标物坐标系下特征点的坐标VISP,单位m
-			vector<vpPoint> point;
-			point.push_back(vpPoint(-0.05, -0.05, 0));
-			point.push_back(vpPoint( 0.05, -0.05, 0));
-			point.push_back(vpPoint( 0.05,  0.05, 0));
-			point.push_back(vpPoint(-0.05,  0.05, 0));
-			//目标物坐标系下特征点的坐标OpenCV,用于solvePnP，单位mm
-			vector<Point3f> point3D;
-			point3D.push_back(Point3f(-50, -50, 0));
-			point3D.push_back(Point3f( 50, -50, 0));
-			point3D.push_back(Point3f( 50,  50, 0));
-			point3D.push_back(Point3f(-50,  50, 0));
-			//理想和当前相机坐标系到目标坐标系的其次变换矩阵
-			vpHomogeneousMatrix cdMo, cMo; 
-
-			vpServo task;		//视觉伺服处理
-			task.setServo(vpServo::EYEINHAND_CAMERA);
-			task.setForceInteractionMatrixComputation(vpServo::CURRENT);	//使用当前点的深度信息
-			task.setLambda(0.5);    //系数
-			task.set_cVe(cMe);
-
-			//获取图像
-			MmVisualServoBase baslerCam;	//相机类
-			vpImage<unsigned char> currentImage;		//当前灰度图像
-			baslerCam.baslerOpen(currentImage);		//打开相机
 			baslerCam.acquireBaslerImg(currentImage);
 
-			vpFeaturePoint p[4], pd[4];		//当前和理想4个特征点坐标
-			vector<vpDot2> desireDot(4), currentDot(4);			//理想和当前的4个色块
-
-			//不同模式
-			enum { DETECTION = 0, DESIRE = 1, CURRENT = 2, TRACKING = 3 };
-			int mode = DETECTION;
-			string msg = "Arm is moving to desired place";		//图片上显示的提示信息
-			int key;	//按键值
-
-			vpDisplayOpenCV d(currentImage, 0, 0, "Current camera image");
-			while (1)//ArmMotionFlag == 0
+			key = 0xff & waitKey(30);
+			if (key == 'd'&& armCamFlag == 1)
 			{
-				baslerCam.acquireBaslerImg(currentImage);
+				mode = DESIRE;
+			}
+			if (key == 'c'&& armCamFlag == 3)
+			{
+				mode = CURRENT;
+			}
+			if ((key & 255) == 27)   //  esc退出键
+			{
+				break;
+			}
 
-				key = 0xff & waitKey(30);
-				if (key == 'd'&& armCamFlag == 1)
+			if (mode == DETECTION)
+			{
+				if (armCamFlag == 1)
 				{
-					mode = DESIRE;
+					msg = "Arm had arrived at desired place,press 'd' to select feature point";
 				}
-				if (key == 'c'&& armCamFlag == 3)
+				if (armCamFlag == 3)
 				{
-					mode = CURRENT;
+					msg = "Arm had arrived at current place,press 'c' to select feature point";
 				}
-				if ((key & 255) == 27)   //  esc退出键
+				vpDisplay::display(currentImage);
+				vpDisplay::displayText(currentImage, 10, 10, msg, vpColor::red);
+				vpDisplay::flush(currentImage);		//显示图像
+			}
+			if (mode == DESIRE)
+			{
+				vpDisplay::display(currentImage);
+				vpDisplay::displayText(currentImage, 10, 10, "Select 4 dot to initalize the desired feature points", vpColor::red);
+				vpDisplay::flush(currentImage);		//显示图像
+
+				//理想位置特征记录
+				//像素坐标系下特征点的坐标OpenCV,用于solvePnP
+				vector<Point2f> point2D;
+				for (unsigned int i = 0; i < 4; i++)
 				{
-					break;
+					desireDot[i].setGraphics(true);
+					desireDot[i].initTracking(currentImage);
+					vpDisplay::flush(currentImage);
+					vpImagePoint dot;
+					dot = desireDot[i].getCog();		//色块重心的像素坐标
+					visualServoAlgorithm.pixelToImage(pd[i], cam, dot);		//获取色块重心图像坐标单位是米，这里没有深度信息
+					//dot = desireDot[i].getCog();
+					//cout << "pd" << i << ": " << pd[i].get_x() << "  " << pd[i].get_y() << endl;
+					//cout << "dot" << i << ": " << dot.get_u() << "  " << dot.get_v() << endl;
+					point2D.push_back(cv::Point2f(dot.get_u(), dot.get_v()));
+					//cout << "point2D " << point2D[i] << endl;
+				}
+				//solvePnP求解cdMo
+				Mat rvec = Mat::zeros(3, 1, CV_64FC1); //旋转向量
+				Mat rM; //旋转矩阵
+				Mat tvec;//平移向量
+				solvePnP(point3D, point2D, visualServoAlgorithm.cam_intrinsic_matrix, visualServoAlgorithm.cam_distortion_matrix, rvec, tvec, false, CV_ITERATIVE);
+				Rodrigues(rvec, rM);
+				cout << "旋转矩阵:" << endl;
+				cout << rM << endl;
+				cout << "平移向量:" << endl;
+				cout << tvec << endl;
+				visualServoAlgorithm.setvpHomogeneousMatrix(cdMo, rM, tvec);
+				cout << "理想位置其次变换矩阵:" << endl;
+				cout << cdMo << endl;
+				//计算深度信息
+				for (int i = 0; i < 4; i++)
+				{
+					vpColVector cP;		//相机坐标系下特征点的三维坐标
+					point[i].changeFrame(cdMo, cP);
+					pd[i].set_Z(cP[2]);
 				}
 
-				if (mode == DETECTION)
+				//返回刷图模式，等待按键c
+				mode = DETECTION;
+				armCamFlag = 2;   //理想特征提取完成，机械臂运动到当前位姿
+				msg = "Arm is moving to current place";
+			}
+			if (mode == CURRENT)
+			{
+				vpDisplay::display(currentImage);
+				vpDisplay::displayText(currentImage, 10, 10, "Select 4 dot to initalize the current feature points", vpColor::red);
+				vpDisplay::flush(currentImage);		//显示图像
+
+				//理想位置特征记录
+				vector<Point2f> point2D;
+				for (unsigned int i = 0; i < 4; i++)
 				{
-					if (armCamFlag==1)
-					{
-						msg = "Arm had arrived at desired place,press 'd' to select feature point";
-					}
-					if (armCamFlag == 3)
-					{
-						msg = "Arm had arrived at current place,press 'c' to select feature point";
-					}
+					currentDot[i].setGraphics(true);
+					currentDot[i].initTracking(currentImage);
+					vpDisplay::flush(currentImage);
+					vpImagePoint dot;
+					dot = currentDot[i].getCog();
+					visualServoAlgorithm.pixelToImage(p[i], cam, dot);	//获取色块重心图像坐标单位是米，这里没有深度信息
+					point2D.push_back(cv::Point2f(dot.get_u(), dot.get_v()));
+				}
+				Mat rvec = Mat::zeros(3, 1, CV_64FC1); //旋转向量
+				Mat rM; //旋转矩阵
+				Mat tvec;//平移向量
+				solvePnP(point3D, point2D, visualServoAlgorithm.cam_intrinsic_matrix, visualServoAlgorithm.cam_distortion_matrix, rvec, tvec, false, CV_ITERATIVE);
+				Rodrigues(rvec, rM);
+				cout << "旋转矩阵:" << endl;
+				cout << rM << endl;
+				cout << "平移向量:" << endl;
+				cout << tvec << endl;
+				visualServoAlgorithm.setvpHomogeneousMatrix(cMo, rM, tvec);
+				cout << "当前位置其次变换矩阵:" << endl;
+				cout << cMo << endl;
+				//计算深度信息
+				for (int i = 0; i < 4; i++)
+				{
+					vpColVector cP;		//相机坐标系下特征点的三维坐标
+					point[i].changeFrame(cMo, cP);
+					p[i].set_Z(cP[2]);
+				}
+
+				//写入特征点信息，包括图像坐标和深度信息，单位为m
+				for (unsigned int i = 0; i < 4; i++)
+				{
+					task.addFeature(p[i], pd[i]);
+					cout << "p" << i << ": " << p[i].get_x() << ", " << p[i].get_y() << ", " << p[i].get_Z() << endl;
+					cout << "pd" << i << ": " << pd[i].get_x() << ", " << pd[i].get_y() << ", " << pd[i].get_Z() << endl;
+				}
+				mode = TRACKING;
+				armCamFlag = 4;
+				msg = "Start tracking";
+			}
+			if (mode == TRACKING)
+			{
+				while (true)
+				{
+					baslerCam.acquireBaslerImg(currentImage);
 					vpDisplay::display(currentImage);
-					vpDisplay::displayText(currentImage, 10, 10, msg, vpColor::red);
-					vpDisplay::flush(currentImage);		//显示图像
-				}
-				if (mode == DESIRE)
-				{
-					vpDisplay::display(currentImage);
-					vpDisplay::displayText(currentImage, 10, 10, "Select 4 dot to initalize the desired feature points", vpColor::red);
-					vpDisplay::flush(currentImage);		//显示图像
-
 					//理想位置特征记录
-					//像素坐标系下特征点的坐标OpenCV,用于solvePnP
 					vector<Point2f> point2D;
-					for (unsigned int i = 0; i < 4; i++)
-					{
-						desireDot[i].setGraphics(true);
-						desireDot[i].initTracking(currentImage);
-						vpDisplay::flush(currentImage);
-						vpImagePoint dot;
-						dot = desireDot[i].getCog();		//色块重心的像素坐标
-						visualServoAlgorithm.pixelToImage(pd[i], cam, dot);		//获取色块重心图像坐标单位是米，这里没有深度信息
-						//dot = desireDot[i].getCog();
-						//cout << "pd" << i << ": " << pd[i].get_x() << "  " << pd[i].get_y() << endl;
-						//cout << "dot" << i << ": " << dot.get_u() << "  " << dot.get_v() << endl;
-						point2D.push_back(cv::Point2f(dot.get_u(), dot.get_v()));
-						//cout << "point2D " << point2D[i] << endl;
-					}
-					//solvePnP求解cdMo
-					Mat rvec = Mat::zeros(3, 1, CV_64FC1); //旋转向量
-					Mat rM; //旋转矩阵
-					Mat tvec;//平移向量
-					solvePnP(point3D, point2D, visualServoAlgorithm.cam_intrinsic_matrix, visualServoAlgorithm.cam_distortion_matrix, rvec, tvec, false, CV_ITERATIVE);
-					Rodrigues(rvec, rM);
-					cout << "旋转矩阵:" << endl;
-					cout << rM << endl;
-					cout << "平移向量:" << endl;
-					cout << tvec << endl;
-					visualServoAlgorithm.setvpHomogeneousMatrix(cdMo, rM, tvec);
-					cout << "理想位置其次变换矩阵:" << endl;
-					cout << cdMo << endl;
-					//计算深度信息
 					for (int i = 0; i < 4; i++)
 					{
-						vpColVector cP;		//相机坐标系下特征点的三维坐标
-						point[i].changeFrame(cdMo, cP);
-						pd[i].set_Z(cP[2]);
-					}
-
-					//返回刷图模式，等待按键c
-					mode = DETECTION;
-					armCamFlag = 2;   //理想特征提取完成，机械臂运动到当前位姿
-					msg = "Arm is moving to current place";
-				}
-				if (mode == CURRENT)
-				{
-					vpDisplay::display(currentImage);
-					vpDisplay::displayText(currentImage, 10, 10, "Select 4 dot to initalize the current feature points", vpColor::red);
-					vpDisplay::flush(currentImage);		//显示图像
-
-					//理想位置特征记录
-					vector<Point2f> point2D;
-					for (unsigned int i = 0; i < 4; i++)
-					{
-						currentDot[i].setGraphics(true);
-						currentDot[i].initTracking(currentImage);
-						vpDisplay::flush(currentImage);
+						currentDot[i].track(currentImage);
 						vpImagePoint dot;
 						dot = currentDot[i].getCog();
 						visualServoAlgorithm.pixelToImage(p[i], cam, dot);	//获取色块重心图像坐标单位是米，这里没有深度信息
@@ -403,95 +453,40 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 						point[i].changeFrame(cMo, cP);
 						p[i].set_Z(cP[2]);
 					}
-
-					//写入特征点信息，包括图像坐标和深度信息，单位为m
-					for (unsigned int i = 0; i < 4; i++)
+					//计算机械臂末端运动速度
+					vpColVector vpeV;
+					vpeV = task.computeControlLaw();		//机械臂末端运动速度
+					//cout << vpeV << endl;
+					for (unsigned int i = 0; i < 6; i++)
 					{
-						task.addFeature(p[i], pd[i]);
-						cout << "p" << i << ": " << p[i].get_x() << ", " << p[i].get_y() << ", " << p[i].get_Z() << endl;
-						cout << "pd" << i << ": " << pd[i].get_x() << ", " << pd[i].get_y() << ", " << pd[i].get_Z() << endl;
+						//cout << "vpeV" << i << ": " << vpeV[i] << endl;
+						Ve(i) = vpeV[i];
 					}
-					mode = TRACKING;
-					armCamFlag = 4;
-					msg = "Start tracking";
-				}
-				if (mode == TRACKING)
-				{
-					while (true)
-					{
-						baslerCam.acquireBaslerImg(currentImage);
-						vpDisplay::display(currentImage);
-						//理想位置特征记录
-						vector<Point2f> point2D;
-						for ( int i = 0; i < 4; i++) 
-						{
-							currentDot[i].track(currentImage);
-							vpImagePoint dot;
-							dot = currentDot[i].getCog();
-							visualServoAlgorithm.pixelToImage(p[i], cam, dot);	//获取色块重心图像坐标单位是米，这里没有深度信息
-							point2D.push_back(cv::Point2f(dot.get_u(), dot.get_v()));
-						}
-						Mat rvec = Mat::zeros(3, 1, CV_64FC1); //旋转向量
-						Mat rM; //旋转矩阵
-						Mat tvec;//平移向量
-						solvePnP(point3D, point2D, visualServoAlgorithm.cam_intrinsic_matrix, visualServoAlgorithm.cam_distortion_matrix, rvec, tvec, false, CV_ITERATIVE);
-						Rodrigues(rvec, rM);
-						cout << "旋转矩阵:" << endl;
-						cout << rM << endl;
-						cout << "平移向量:" << endl;
-						cout << tvec << endl;
-						visualServoAlgorithm.setvpHomogeneousMatrix(cMo, rM, tvec);
-						cout << "当前位置其次变换矩阵:" << endl;
-						cout << cMo << endl;
-						//计算深度信息
-						for (int i = 0; i < 4; i++)
-						{
-							vpColVector cP;		//相机坐标系下特征点的三维坐标
-							point[i].changeFrame(cMo, cP);
-							p[i].set_Z(cP[2]);
-						}
-						//计算机械臂末端运动速度
-						eV = task.computeControlLaw();		//相机运动速度
-						cout << eV << endl;
-						for (unsigned int i = 0; i < eV.size(); i++)
-						{
-							cout << "eV" << i << ": " << eV[i] << endl;
-						}
-						visualServoAlgorithm.display_trajectory(currentImage, currentDot);
-						vpServoDisplay::display(task, cam, currentImage, vpColor::green, vpColor::red);	//绘制特征点的当前位置和理想位置
-						vpDisplay::flush(currentImage);
+					visualServoAlgorithm.display_trajectory(currentImage, currentDot);
+					vpServoDisplay::display(task, cam, currentImage, vpColor::green, vpColor::red);	//绘制特征点的当前位置和理想位置
+					vpDisplay::flush(currentImage);
 
-						key = 0xff & waitKey(100);
-						if ((key & 255) == 27)   //  esc退出键
-						{
-							mode = DETECTION;
-							msg = "Exit tracking, press esc again to quit";
-							break;
-						}
+					key = 0xff & waitKey(30);
+					if ((key & 255) == 27)   //  esc退出键
+					{
+						mode = DETECTION;
+						armCamFlag = 5;		//机械臂退出运动
+						msg = "Exit tracking, press esc again to quit";
+						break;
 					}
-					
 				}
-				
 			}
-			baslerCam.close();
-			task.kill();
-			
-
-			
-
-			
-
-
 		}
-		catch (vpException &e) {
-			std::cout << "Catch an exception: " << e << std::endl;
-		}
+		baslerCam.close();
+		task.kill();
 
+	}
+	catch (vpException &e) {
+		std::cout << "Catch an exception: " << e << std::endl;
+	}
 
-//	}
 
 	cout << "10.CamThread has finished." << endl;
-
 	return 0;
 }
 
@@ -510,7 +505,7 @@ DWORD WINAPI MobileRobotAviodFun(LPVOID lpParameter)
 		//启动机械臂运动控制线程
 		ResumeThread(ArmMotionThread);
 	}
-	
+
 	return 0;
 }
 
@@ -560,8 +555,8 @@ DWORD WINAPI SendDatas(LPVOID lpParameter)
 //自动连续定位导航开启
 void startAutoNavigation()
 {
-	VisualNavigationFlag = 0;	
-	ArmMotionFlag = 0;			
+	VisualNavigationFlag = 0;
+	ArmMotionFlag = 0;
 	ThreadsExitFlag = 0;
 	navigationAutoflag = NAVIGATIONSTART;
 
@@ -622,10 +617,10 @@ void startArmControl()
 /*主程序入口*/
 /************************************************************************/
 void main
-   (
-   int argc,
-   char **argv
-   )
+(
+int argc,
+char **argv
+)
 {
 	InitializeCriticalSection(&thread_cs);		//初始化关键代码段，用于线程间同步
 
@@ -674,7 +669,7 @@ void main
 	listen(sockSrv, 20);		//第二个参数为等待队列的最大长度
 	SOCKADDR_IN addrClient;		//定义一个地址结构体SOCKADDR_IN变量，用来接收客户端的地址信息
 	int len = sizeof(SOCKADDR);
-	
+
 	/************************************************************************/
 	/*接收客户端指令并执行操作*/
 	/************************************************************************/
@@ -721,7 +716,7 @@ void main
 				break;
 			}
 		}
-		
+
 		while (tcpThreadFlag == EXITSOCKET)
 		{
 			Sleep(100);
@@ -732,7 +727,7 @@ void main
 			printf("退出程序\n");
 			break;		//退出程序
 		}
-		
+
 	}
 
 	Sleep(500);
