@@ -266,6 +266,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 			task.setServo(vpServo::EYEINHAND_CAMERA);
 			task.setForceInteractionMatrixComputation(vpServo::CURRENT);	//使用当前点的深度信息
 			task.setLambda(0.5);    //系数
+			task.set_cVe(cMe);
 
 			//获取图像
 			MmVisualServoBase baslerCam;	//相机类
@@ -450,8 +451,8 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 						}
 						//计算机械臂末端运动速度
 						eV = task.computeControlLaw();
-						cout << eV;
-						for (int i = 0; i << eV.size(); i++)
+						cout << eV << endl;
+						for (int i = 0; i < eV.size(); i++)
 						{
 							cout << "eV" << i << ": " << eV[i] << endl;
 						}
@@ -472,7 +473,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 				
 			}
 			baslerCam.close();
-
+			task.kill();
 			
 
 			
