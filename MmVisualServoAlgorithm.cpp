@@ -197,3 +197,17 @@ void MmVisualServoAlgorithm::setvpHomogeneousMatrix(vpHomogeneousMatrix &outM, c
 	}
 	outM[3][3] = 1;
 }
+
+//显示图像特征点运动轨迹
+void MmVisualServoAlgorithm::display_trajectory(const vpImage<unsigned char> &I, const std::vector<vpDot2> &dot)
+{
+	static std::vector<vpImagePoint> traj[4];
+	for (unsigned int i = 0; i < 4; i++) {
+		traj[i].push_back(dot[i].getCog());
+	}
+	for (unsigned int i = 0; i < 4; i++) {
+		for (unsigned int j = 1; j < traj[i].size(); j++) {
+			vpDisplay::displayLine(I, traj[i][j - 1], traj[i][j], vpColor::green);
+		}
+	}
+}

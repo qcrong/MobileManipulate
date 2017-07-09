@@ -38,7 +38,8 @@ public:
 	void setCamDistortion( double camDistortion[5]);
 	//设置由OpenCV中Mat格式的3X3旋转矩阵和3X1平移矩阵设置VISP齐次变换矩阵
 	void setvpHomogeneousMatrix(vpHomogeneousMatrix &outM, const Mat &rM, const Mat &tM);
-
+	//显示图像特征点运动轨迹
+	void display_trajectory(const vpImage<unsigned char> &I, const std::vector<vpDot2> &dot);
 
 public:
 	//摄像机内参数
@@ -47,6 +48,8 @@ public:
 	//摄像机畸变参数
 	Mat cam_distortion_matrix = Mat(5, 1, CV_64FC1);
 	double camDistortionParam[5];
+	//机械臂末端运动速度
+	vpColVector eV;
 
 private:
 

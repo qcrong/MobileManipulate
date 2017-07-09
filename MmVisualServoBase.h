@@ -45,7 +45,6 @@ public:
 	void acquireAxisImg(Mat *img);
 	
 	
-
 private:
 	/**********Basler相机参数**********/
 	PylonAutoInitTerm autoInitTerm;  // PylonInitialize() 需要在打开摄像头之前调用，该类直接调用该函数
