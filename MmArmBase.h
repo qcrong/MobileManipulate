@@ -25,6 +25,19 @@ namespace bpo = boost::program_options;
 using namespace Eigen;
 using namespace std;
 
+#define RC_CHECK(fun) do \
+{ \
+	std::cout << "Calling " << #fun << std::endl; \
+if (!fun) \
+{ \
+	std::cerr << "Problem with command " << #fun << "\n"; \
+} \
+	  else \
+{\
+	EcPrint(None) << #fun << " successfully completed!" << "\n"; \
+}\
+} while (0)
+
 /// This class uses the remote commands API to communicate with the 
 //  ActinViewer/CytonViewer or ActinRT with the remoteCommandServerPlugin loaded.
 class EcCytonCommands

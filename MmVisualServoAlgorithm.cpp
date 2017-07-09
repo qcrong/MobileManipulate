@@ -185,10 +185,10 @@ void MmVisualServoAlgorithm::setvpHomogeneousMatrix(vpHomogeneousMatrix &outM, c
 			outM[i][j] = rM.at<double>(i, j);
 		}
 	}
-	//设置平移矩阵
+	//设置平移矩阵,单位由mm转化为m
 	for (int i = 0; i < 3; i++)
 	{
-		outM[i][3] = tM.at<double>(0, i);
+		outM[i][3] = tM.at<double>(0, i)/1000;
 	}
 	//齐次项
 	for (int j = 0; j < 3; j++)
