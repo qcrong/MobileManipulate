@@ -657,7 +657,8 @@ void EcCytonCommands::GetPose(EcReArray & array)
 	array = actualCoord.make4x4();
 }
 
-///速度控制模式下对机器人运动进行控制，主要用于视觉伺服运动控制过程，需要用到eigen工具箱，方便运算。输入为速度矢量，前三个是平移，后三个是旋转
+///速度控制模式下对机器人运动进行控制，主要用于视觉伺服运动控制过程，需要用到eigen工具箱，方便运算。输入为速度矢量，前三个是xyz平移，后三个是xyz旋转
+///以机器人极坐标系为基准
 EcBoolean EcCytonCommands::SetEEVelocity(VectorXd & EEVelo)
 {
 	// 首先必须设置控制模式为速度控制模式
@@ -685,9 +686,9 @@ EcBoolean EcCytonCommands::SetEEVelocity(VectorXd & EEVelo)
 		retVal = setDesiredVelocity(endVelo);
 
 		// 设置持续时间，到时间就停下来。实际控制时可以酌情选择
-		EcSLEEPMS(100);
-		EcRealVector zeroVelo(endVelo.size());
-		retVal = setDesiredVelocity(zeroVelo);
+		EcSLEEPMS(1000);
+		//EcRealVector zeroVelo(endVelo.size());
+		//retVal = setDesiredVelocity(zeroVelo);
 
 		// change back to position control
 		retVal = setControlMode(0);
