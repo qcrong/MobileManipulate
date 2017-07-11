@@ -207,7 +207,7 @@ void MmVisualServoAlgorithm::display_trajectory(const vpImage<unsigned char> &I,
 	}
 	for (unsigned int i = 0; i < 4; i++) {
 		for (unsigned int j = 1; j < traj[i].size(); j++) {
-			vpDisplay::displayLine(I, traj[i][j - 1], traj[i][j], vpColor::green);
+			vpDisplay::displayLine(I, traj[i][j - 1], traj[i][j], vpColor::blue);
 		}
 	}
 }

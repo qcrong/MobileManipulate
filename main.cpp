@@ -149,13 +149,13 @@ DWORD WINAPI ArmMotionFun(LPVOID lpParameter)
 	//从关节角控制切换到位姿控制，对当前位姿进行初始化
 	EcCoordinateSystemTransformation desiredPose;
 	cytonCommands->changeToFrameEE(desiredPose);
-	EcSLEEPMS(10000);
-	EcVector relaTransform(-0.02, 0.0, 0.0);		//相对于当前手爪末端坐标系XYZ的平移量
+	EcSLEEPMS(100);
+	EcVector relaTransform(-0.04, 0.0, 0.0);		//相对于当前手爪末端坐标系XYZ的平移量
 	EcOrientation relaOriention;            //相对于当前手爪末端坐标系Z-Y-X的旋转量
-	relaOriention.setFrom321Euler(EcPi/2, 0, 0);    //绕Z-Y-X欧拉角对当前末端手爪姿态进行旋转
+	relaOriention.setFrom321Euler(0, 0, 0);    //绕Z-Y-X欧拉角对当前末端手爪姿态进行旋转
 	EcCoordinateSystemTransformation relativetrans(relaTransform, relaOriention);		//设置平移旋转量
 	RC_CHECK(cytonCommands->frameMovementExample(desiredPose * relativetrans));
-	EcSLEEPMS(1000);
+	EcSLEEPMS(500);
 	armCamFlag = 1;    //相机运动到理想位姿
 
 	/*VectorXd pose;
@@ -192,7 +192,7 @@ DWORD WINAPI ArmMotionFun(LPVOID lpParameter)
 	cout << "array2: " << array << endl;*/
 
 	//等待相机获取理想位姿信息
-	while (armCamFlag != 2)
+	while (armCamFlag != 2 && armCamFlag != -1)
 	{
 		Sleep(100);
 		if (ThreadsExitFlag == NAVIGATIONSTOP)
@@ -207,15 +207,15 @@ DWORD WINAPI ArmMotionFun(LPVOID lpParameter)
 	}
 
 	cout << "运动到当前位姿" << endl;
-	relaTransform.set(0.01, 0.0, 0.0);		//XYZ平移向量
-	relaOriention.setFrom321Euler(-EcPi / 36, 0, 0);    //绕Z-Y-X欧拉角对当前末端手爪姿态进行旋转
+	relaTransform.set(0.05, 0.04, 0.05);		//XYZ平移向量
+	relaOriention.setFrom321Euler(-EcPi / 12, 0, -EcPi / 12);    //绕Z-Y-X欧拉角对当前末端手爪姿态进行旋转
 	relativetrans.outboardTransformBy(relaTransform, relaOriention);
 	RC_CHECK(cytonCommands->frameMovementExample(desiredPose * relativetrans));
-	EcSLEEPMS(1000);
+	EcSLEEPMS(500);
 	armCamFlag = 3;    //相机运动到当前位姿
 
 	//等待相机获取当前位姿信息
-	while (armCamFlag != 4)
+	while (armCamFlag != 4 && armCamFlag != -1)
 	{
 		Sleep(100);
 		if (ThreadsExitFlag == NAVIGATIONSTOP)
@@ -233,12 +233,13 @@ DWORD WINAPI ArmMotionFun(LPVOID lpParameter)
 	Ve << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
 	LeaveCriticalSection(&thread_cs);		
 	cout << "机械臂位姿调整开始" << endl;
-	while (ThreadsExitFlag != NAVIGATIONSTOP && armCamFlag != 5)
+	while (ThreadsExitFlag != NAVIGATIONSTOP && armCamFlag != -1)
 	{
-
-		//cytonCommands->SetEEVelocity(Ve);
-		//cout << Ve << endl;
-		break;
+		//Sleep(100);
+		cytonCommands->SetEEVelocity(Ve);
+		//Sleep(60);
+		cout << Ve << endl << endl;
+		//break;
 
 	}
 
@@ -301,13 +302,13 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 		point3D.push_back(Point3f(50, 50, 0));
 		point3D.push_back(Point3f(-50, 50, 0));
 		//理想和当前相机坐标系到目标坐标系的其次变换矩阵
-		vpHomogeneousMatrix cdMo, cMo, fMe;
+		vpHomogeneousMatrix cdMo, cMo, fMe,cMf;
 
 		vpServo task;		//视觉伺服处理
 		task.setServo(vpServo::EYEINHAND_CAMERA);
 		task.setForceInteractionMatrixComputation(vpServo::CURRENT);	//使用当前点的深度信息
-		task.setLambda(0.5);    //系数
-		task.set_cVe(cMe);		//设置手眼坐标关系，使task计算出来的速度为机械臂末端速度
+		task.setLambda(0.3);    //系数
+		//task.set_cVe(cMe);		//设置手眼坐标关系，使task计算出来的速度为机械臂末端速度
 
 		//获取图像
 		MmVisualServoBase baslerCam;	//相机类
@@ -453,7 +454,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 				}
 				mode = TRACKING;
 				armCamFlag = 4;
-				msg = "Start tracking";
+				msg = "Start tracking,press esc to quit";
 			}
 			if (mode == TRACKING)
 			{
@@ -476,13 +477,13 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 					Mat tvec;//平移向量
 					solvePnP(point3D, point2D, visualServoAlgorithm.cam_intrinsic_matrix, visualServoAlgorithm.cam_distortion_matrix, rvec, tvec, false, CV_ITERATIVE);
 					Rodrigues(rvec, rM);
-					cout << "旋转矩阵:" << endl;
+					/*cout << "旋转矩阵:" << endl;
 					cout << rM << endl;
 					cout << "平移向量:" << endl;
-					cout << tvec << endl;
+					cout << tvec << endl;*/
 					visualServoAlgorithm.setvpHomogeneousMatrix(cMo, rM, tvec);
-					cout << "当前位置其次变换矩阵:" << endl;
-					cout << cMo << endl;
+					/*cout << "当前位置其次变换矩阵:" << endl;
+					cout << cMo << endl;*/
 					//计算深度信息
 					for (int i = 0; i < 4; i++)
 					{
@@ -493,7 +494,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 					//获取机械臂末端在基坐标系下的位姿
 					EcReArray array;
 					cytonCommands->GetPose(array);
-					cout << "array: " << array << endl;
+					//cout << "array: " << array << endl;
 					for (int i = 0; i < 4; i++)
 					{
 						for (int j = 0; j < 4; j++)
@@ -501,12 +502,14 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 							fMe[i][j] = array[i][j];
 						}
 					}
-					task.set_fVe(fMe);
+					//task.set_fVe(fMe);
+					cMf = cMe*(fMe.inverse());
+					task.set_cVf(cMf);
 
 					//计算机械臂末端运动速度
 					vpColVector vpeV;
 					vpeV = task.computeControlLaw();		//机械臂末端运动速度
-					cout << vpeV << endl;
+					//cout << vpeV << endl;
 					for (unsigned int i = 0; i < 6; i++)
 					{
 						EnterCriticalSection(&thread_cs);
@@ -518,16 +521,23 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 					vpDisplay::flush(currentImage);
 
 					key = 0xff & waitKey(30);
-					if ((key & 255) == 27)   //  esc退出键
+					if ((key & 255) == 27 || (task.getError()).sumSquare() < 0.0001)   //  esc退出键
 					{
+						armCamFlag = -1;		//机械臂退出运动
 						mode = DETECTION;
-						armCamFlag = 5;		//机械臂退出运动
-						msg = "Exit tracking, press esc again to quit";
+						vpDisplay::getClick(currentImage, true);
+						/*while (vpDisplay::getClick(currentImage, false))
+						{
+							Sleep(100);
+						}*/
+						//msg = "Exit tracking, press esc again to quit";
 						break;
 					}
 				}
+				break;  //退出TRACKING
 			}
 		}
+		armCamFlag = -1;		//机械臂退出运动
 		baslerCam.close();
 		task.kill();
 
@@ -563,7 +573,7 @@ DWORD WINAPI MobileRobotAviodFun(LPVOID lpParameter)
 //机械臂避障线程
 DWORD WINAPI ArmAvoidFun(LPVOID lpParameter)
 {
-	//ResumeThread(CamThread);
+	ResumeThread(CamThread);
 	cout << "8. ArmAvoidThread is running." << endl;
 	while (ArmMotionFlag == 0)
 	{
