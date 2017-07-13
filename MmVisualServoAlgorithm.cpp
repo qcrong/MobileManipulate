@@ -211,3 +211,68 @@ void MmVisualServoAlgorithm::display_trajectory(const vpImage<unsigned char> &I,
 		}
 	}
 }
+
+//转动关节，连杆间的速度传递，由Vi计算Vi+1
+//VWi为i关节6X1的线速度和角速度矢量，i1Ri为关节i+1到关节i的旋转矩阵，iPi1为关节i到i+1的平移向量
+void MmVisualServoAlgorithm::linkageVTransmit(const vpColVector &VWi, const Mat &i1Ri, const Mat &iPi1, Mat &outVWi1)
+{
+	//i关节线速度
+	Mat vi = Mat(3, 1, CV_32FC1);
+	vi.at<float>(0, 0) = VWi[0];
+	vi.at<float>(1, 0) = VWi[1];
+	vi.at<float>(2, 0) = VWi[2];
+	//i关节角速度
+	Mat wi = Mat(3, 1, CV_32FC1);
+	wi.at<float>(0, 0) = VWi[3];
+	wi.at<float>(1, 0) = VWi[4];
+	wi.at<float>(2, 0) = VWi[5];
+
+	//i+1关节线速度
+	Mat vi1 = Mat(3, 1, CV_32FC1);
+	//wi叉乘iPi1的结果
+	Mat wXP = Mat(3, 1, CV_32FC1);
+	cvCrossProduct(&wi, &iPi1, &wXP);
+	vi1 = i1Ri*(vi + wXP);
+
+	//i+1关节角速度
+	Mat wi1 = Mat(3, 1, CV_32FC1);
+	wi1 = i1Ri*wi;
+
+	//将结果赋值
+	outVWi1.at<float>(0, 0) = vi1.at<float>(0, 0);
+	outVWi1.at<float>(1, 0) = vi1.at<float>(1, 0);
+	outVWi1.at<float>(2, 0) = vi1.at<float>(2, 0);
+	outVWi1.at<float>(3, 0) = wi1.at<float>(0, 0);
+	outVWi1.at<float>(4, 0) = wi1.at<float>(1, 0);
+	outVWi1.at<float>(5, 0) = wi1.at<float>(2, 0);
+}
+
+//将末端手爪坐标系下的末端速度转换到基坐标系下
+void MmVisualServoAlgorithm::eVeTransmitTofVe(const Mat &eVe, const Mat &fRe, Mat &outfVe)
+{
+	//末端线速度
+	Mat ve = Mat(3, 1, CV_32FC1);
+	ve.at<float>(0, 0) = eVe.at<float>(0, 0);
+	ve.at<float>(1, 0) = eVe.at<float>(1, 0);
+	ve.at<float>(2, 0) = eVe.at<float>(2, 0);
+	//基坐标系下末端线速度
+	Mat fve = Mat(3, 1, CV_32FC1);
+	fve = fRe*ve;
+
+	//末端角速度
+	Mat we = Mat(3, 1, CV_32FC1);
+	we.at<float>(0, 0) = eVe.at<float>(3, 0);
+	we.at<float>(1, 0) = eVe.at<float>(4, 0);
+	we.at<float>(2, 0) = eVe.at<float>(5, 0);
+	//基坐标系下末端线速度
+	Mat fwe = Mat(3, 1, CV_32FC1);
+	fwe = fRe*we;
+
+	//将结果赋值
+	outfVe.at<float>(0, 0) = fve.at<float>(0, 0);
+	outfVe.at<float>(1, 0) = fve.at<float>(1, 0);
+	outfVe.at<float>(2, 0) = fve.at<float>(2, 0);
+	outfVe.at<float>(3, 0) = fwe.at<float>(0, 0);
+	outfVe.at<float>(4, 0) = fwe.at<float>(1, 0);
+	outfVe.at<float>(5, 0) = fwe.at<float>(2, 0);
+}

@@ -40,6 +40,11 @@ public:
 	void setvpHomogeneousMatrix(vpHomogeneousMatrix &outM, const Mat &rM, const Mat &tM);
 	//显示图像特征点运动轨迹
 	void display_trajectory(const vpImage<unsigned char> &I, const std::vector<vpDot2> &dot);
+	//转动关节，连杆间的速度传递，由Vi计算Vi+1
+	//VWi为i关节6X1的线速度和角速度矢量，i1Ri为关节i+1到关节i的旋转矩阵，iPi1为关节i到i+1的平移向量
+	void linkageVTransmit(const vpColVector &VWi, const Mat &i1Ri, const Mat &iPi1, Mat &outVWi1);
+	//将末端手爪坐标系下的末端速度转换到基坐标系下
+	void eVeTransmitTofVe(const Mat &eVe, const Mat &fRe, Mat &outfVe);
 
 public:
 	//摄像机内参数

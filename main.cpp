@@ -37,8 +37,8 @@ volatile int ArmMotionFlag = 0;
 volatile int ThreadsExitFlag = 0;
 //机械臂和相机线程的同步控制标志位，相机运动到位时置1，相机处理完成置2
 volatile int armCamFlag = 0;
-//视觉计算出来的机械臂末端运动速度
-VectorXd Ve(6);
+//视觉计算出来的基坐标系下机械臂末端运动速度
+VectorXd fVe(6);
 //机械臂控制类指针，作为全局变量方便视觉线程获取机械臂信息
 EcCytonCommands *cytonCommands;
 
@@ -230,15 +230,15 @@ DWORD WINAPI ArmMotionFun(LPVOID lpParameter)
 	}
 
 	EnterCriticalSection(&thread_cs);
-	Ve << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
+	fVe << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
 	LeaveCriticalSection(&thread_cs);		
 	cout << "机械臂位姿调整开始" << endl;
 	while (ThreadsExitFlag != NAVIGATIONSTOP && armCamFlag != -1)
 	{
-		//Sleep(100);
-		cytonCommands->SetEEVelocity(Ve);
+		Sleep(100);
+		//cytonCommands->SetEEVelocity(fVe);
 		//Sleep(60);
-		cout << Ve << endl << endl;
+		//cout << fVe << endl << endl;
 		//break;
 
 	}
@@ -274,20 +274,34 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 		double camDistortion[5] = { -0.4034783300939766, 0.6235344618772364, -0.0003784404964069526, -0.0006034915824095659, -1.59162547482239 };	//摄像机畸变参数
 		visualServoAlgorithm.setCamDistortion(camDistortion);
 		cout << visualServoAlgorithm.cam_distortion_matrix << endl;
-		vpHomogeneousMatrix cMe;	//手到眼的齐次变换矩阵
-		cMe[0][0] = 0.02392906951946957;
-		cMe[0][1] = -0.9996695279615721;
-		cMe[0][2] = -0.009393321937448875;
-		cMe[0][3] = 0.003921601488734311;
-		cMe[1][0] = -0.9978755364802699;
-		cMe[1][1] = -0.02445353703931933;
-		cMe[1][2] = 0.06038574517616292;
-		cMe[1][3] = 0.07188804515813692;
-		cMe[2][0] = -0.0605954893217822;
-		cMe[2][1] = 0.007928391473358304;
-		cMe[2][2] = -0.9981309169054426;
-		cMe[2][3] = -0.007847588857483204;
+		//vpHomogeneousMatrix cMe;	//手到眼的齐次变换矩阵
+		//cMe[0][0] = 0.02392906951946957;
+		//cMe[0][1] = -0.9996695279615721;
+		//cMe[0][2] = -0.009393321937448875;
+		//cMe[0][3] = 0.003921601488734311;
+		//cMe[1][0] = -0.9978755364802699;
+		//cMe[1][1] = -0.02445353703931933;
+		//cMe[1][2] = 0.06038574517616292;
+		//cMe[1][3] = 0.07188804515813692;
+		//cMe[2][0] = -0.0605954893217822;
+		//cMe[2][1] = 0.007928391473358304;
+		//cMe[2][2] = -0.9981309169054426;
+		//cMe[2][3] = -0.007847588857483204;
 
+		Mat eRc = Mat(3, 3, CV_32FC1); //手到眼的旋转矩阵
+		eRc.at<float>(0, 0) = 0.02393;
+		eRc.at<float>(0, 1) = -0.99788;
+		eRc.at<float>(0, 2) = -0.0606;
+		eRc.at<float>(1, 0) = -0.99967;
+		eRc.at<float>(1, 1) = -0.02445;
+		eRc.at<float>(1, 2) = 0.00793;
+		eRc.at<float>(2, 0) = -0.00939;
+		eRc.at<float>(2, 1) = 0.06039;
+		eRc.at<float>(2, 2) = -0.99813;
+		Mat cPe = Mat(3, 1, CV_32FC1); //眼到手的平移向量，单位为m
+		cPe.at<float>(0, 0) = 0.00392;
+		cPe.at<float>(1, 0) = 0.07189;
+		cPe.at<float>(2, 0) = -0.00785;
 
 		//目标物坐标系下特征点的坐标VISP,单位m
 		vector<vpPoint> point;
@@ -302,7 +316,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 		point3D.push_back(Point3f(50, 50, 0));
 		point3D.push_back(Point3f(-50, 50, 0));
 		//理想和当前相机坐标系到目标坐标系的其次变换矩阵
-		vpHomogeneousMatrix cdMo, cMo, fMe,cMf;
+		vpHomogeneousMatrix cdMo, cMo, cMf;
 
 		vpServo task;		//视觉伺服处理
 		task.setServo(vpServo::EYEINHAND_CAMERA);
@@ -461,6 +475,12 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 				while (true)
 				{
 					baslerCam.acquireBaslerImg(currentImage);
+
+					//获取机械臂末端在基坐标系下的位姿
+					EcReArray fTe;
+					cytonCommands->GetPose(fTe);
+					//cout << "fTe: " << endl << fTe << endl;
+
 					vpDisplay::display(currentImage);
 					//理想位置特征记录
 					vector<Point2f> point2D;
@@ -491,31 +511,43 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 						point[i].changeFrame(cMo, cP);
 						p[i].set_Z(cP[2]);
 					}
-					//获取机械臂末端在基坐标系下的位姿
-					EcReArray array;
-					cytonCommands->GetPose(array);
-					//cout << "array: " << array << endl;
-					for (int i = 0; i < 4; i++)
-					{
-						for (int j = 0; j < 4; j++)
-						{
-							fMe[i][j] = array[i][j];
-						}
-					}
+					
 					//task.set_fVe(fMe);
-					cMf = cMe*(fMe.inverse());
-					task.set_cVf(cMf);
+					//cMf = cMe*(fMe.inverse());
+					//task.set_cVf(cMf);
 
 					//计算机械臂末端运动速度
-					vpColVector vpeV;
-					vpeV = task.computeControlLaw();		//机械臂末端运动速度
-					//cout << vpeV << endl;
+					vpColVector vpVc;
+					vpVc = task.computeControlLaw();		//机械臂末端运动速度
+					cout << "vpVc" << endl << vpVc << endl;
+					//相机坐标系下相机的速度
+					Mat eVe = Mat(6, 1, CV_32FC1);
+					visualServoAlgorithm.linkageVTransmit(vpVc, eRc, cPe, eVe);
+					cout << "eVe:" << endl << eVe << endl;
+					//将末端手爪坐标系下的末端速度转换到基坐标系下
+					//基坐标系到末端手爪的旋转矩阵
+					Mat fRe = Mat(6, 1, CV_32FC1);
+					for (int i = 0; i < 3; i++)
+					{
+						for (int j = 0; j < 3; j++)
+						{
+							fRe.at<float>(i, j) = fTe[i][j];
+						}
+					}
+					cout << "fRe:" << endl << fRe << endl;
+					Mat matfVe = Mat(6, 1, CV_32FC1);
+					visualServoAlgorithm.eVeTransmitTofVe(eVe, fRe, matfVe);
+
 					for (unsigned int i = 0; i < 6; i++)
 					{
 						EnterCriticalSection(&thread_cs);
-						Ve(i) = vpeV[i];
+						fVe(i) = matfVe.at<float>(i, 0);
 						LeaveCriticalSection(&thread_cs);					
 					}
+					cout << "fVe:" << endl << fVe << endl << endl;
+					cout << "/////////////////////" << endl << endl;
+
+					//绘制图像轨迹
 					visualServoAlgorithm.display_trajectory(currentImage, currentDot);
 					vpServoDisplay::display(task, cam, currentImage, vpColor::green, vpColor::red);	//绘制特征点的当前位置和理想位置
 					vpDisplay::flush(currentImage);
