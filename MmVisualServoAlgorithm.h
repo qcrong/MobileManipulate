@@ -57,5 +57,6 @@ public:
 	vpColVector eV;
 
 private:
-
+	//绘制特征点在图像上的运动轨迹
+	vector<vpImagePoint> traj[4];
 };

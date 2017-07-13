@@ -201,7 +201,7 @@ void MmVisualServoAlgorithm::setvpHomogeneousMatrix(vpHomogeneousMatrix &outM, c
 //显示图像特征点运动轨迹
 void MmVisualServoAlgorithm::display_trajectory(const vpImage<unsigned char> &I, const std::vector<vpDot2> &dot)
 {
-	static std::vector<vpImagePoint> traj[4];
+	//static std::vector<vpImagePoint> traj[4];
 	for (unsigned int i = 0; i < 4; i++) {
 		traj[i].push_back(dot[i].getCog());
 	}
@@ -231,7 +231,8 @@ void MmVisualServoAlgorithm::linkageVTransmit(const vpColVector &VWi, const Mat 
 	Mat vi1 = Mat(3, 1, CV_32FC1);
 	//wi叉乘iPi1的结果
 	Mat wXP = Mat(3, 1, CV_32FC1);
-	cvCrossProduct(&wi, &iPi1, &wXP);
+	//cvCrossProduct(&wi, &iPi1, &wXP);
+	wXP = wi.cross(iPi1);
 	vi1 = i1Ri*(vi + wXP);
 
 	//i+1关节角速度
