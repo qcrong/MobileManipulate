@@ -25,7 +25,7 @@
 #include <iostream>
 #include <stdio.h>
 
-//using namespace std;
+using namespace std;
 
 //全局变量
 //volatile来告诉编译器这个全局变量是易变的，让编译器不要对这个变量进行优化
@@ -154,11 +154,11 @@ DWORD WINAPI ArmMotionFun(LPVOID lpParameter)
 	relaOriention.setFrom321Euler(0, 0, 0);    //绕Z-Y-X欧拉角对当前末端手爪姿态进行旋转
 	EcCoordinateSystemTransformation relativetrans(relaTransform, relaOriention);		//设置平移旋转量
 	RC_CHECK(cytonCommands->frameMovementExample(desiredPose * relativetrans));
-	EcSLEEPMS(500);
-	armCamFlag = 1;    //相机运动到理想位姿
+	EcSLEEPMS(100);
+	armCamFlag = 1;    //相机运动到当前位姿
 
-	//等待相机获取理想位姿信息
-	while (armCamFlag != 2 && armCamFlag != -1)
+	//等待相机获取理想位姿信息和当前位姿信息
+	while (armCamFlag != 3 && armCamFlag != -1)
 	{
 		Sleep(100);
 		if (ThreadsExitFlag == NAVIGATIONSTOP)
@@ -172,28 +172,28 @@ DWORD WINAPI ArmMotionFun(LPVOID lpParameter)
 		}
 	}
 
-	cout << "运动到当前位姿" << endl;
-	relaTransform.set(0.01, 0.05, -0.05);		//XYZ平移向量
-	relaOriention.setFrom321Euler(-EcPi / 12, 0, EcPi / 36);    //绕Z-Y-X欧拉角对当前末端手爪姿态进行旋转
-	relativetrans.outboardTransformBy(relaTransform, relaOriention);
-	RC_CHECK(cytonCommands->frameMovementExample(desiredPose * relativetrans));
-	EcSLEEPMS(500);
-	armCamFlag = 3;    //相机运动到当前位姿
+	//cout << "运动到当前位姿" << endl;
+	//relaTransform.set(0.01, 0.05, -0.05);		//XYZ平移向量
+	//relaOriention.setFrom321Euler(-EcPi / 12, 0, EcPi / 36);    //绕Z-Y-X欧拉角对当前末端手爪姿态进行旋转
+	//relativetrans.outboardTransformBy(relaTransform, relaOriention);
+	//RC_CHECK(cytonCommands->frameMovementExample(desiredPose * relativetrans));
+	//EcSLEEPMS(500);
+	//armCamFlag = 3;    //相机运动到当前位姿
 
-	//等待相机获取当前位姿信息
-	while (armCamFlag != 4 && armCamFlag != -1)
-	{
-		Sleep(100);
-		if (ThreadsExitFlag == NAVIGATIONSTOP)
-		{
-			cytonCommands->closeNetwork();
-			cout << "9. ArmMotionThread has finished." << endl;
-			//EnterCriticalSection(&thread_cs);
-			ArmMotionFlag = 1;
-			//LeaveCriticalSection(&thread_cs);
-			return 1;
-		}
-	}
+	////等待相机获取当前位姿信息
+	//while (armCamFlag != 4 && armCamFlag != -1)
+	//{
+	//	Sleep(100);
+	//	if (ThreadsExitFlag == NAVIGATIONSTOP)
+	//	{
+	//		cytonCommands->closeNetwork();
+	//		cout << "9. ArmMotionThread has finished." << endl;
+	//		//EnterCriticalSection(&thread_cs);
+	//		ArmMotionFlag = 1;
+	//		//LeaveCriticalSection(&thread_cs);
+	//		return 1;
+	//	}
+	//}
 
 	EnterCriticalSection(&thread_cs);
 	fVe << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
@@ -272,6 +272,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 
 		//获取图像
 		MmVisualServoBase baslerCam;	//相机类
+		vpImage<unsigned char> desireImage;		//当前灰度图像
 		vpImage<unsigned char> currentImage;		//当前灰度图像
 		baslerCam.baslerOpen(currentImage);		//打开相机
 		baslerCam.acquireBaslerImg(currentImage);
@@ -282,10 +283,11 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 		//不同模式
 		enum { DETECTION = 0, DESIRE = 1, CURRENT = 2, TRACKING = 3 };
 		int mode = DETECTION;
-		string msg = "Arm is moving to desired place";		//图片上显示的提示信息
+		string msg = "Arm is moving to initial pose";		//图片上显示的提示信息
 		int key;	//按键值
 
-		vpDisplayOpenCV d(currentImage, 0, 0, "Current camera image");
+		vpDisplayOpenCV current(currentImage, 0, 0, "Current camera image");
+		vpDisplayOpenCV desire(desireImage, 700, 0, "Desire camera image");
 		while (1)
 		{
 			baslerCam.acquireBaslerImg(currentImage);
@@ -295,7 +297,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 			{
 				mode = DESIRE;
 			}
-			if (key == 'c'&& armCamFlag == 3)
+			if (key == 'c'&& armCamFlag == 2)
 			{
 				mode = CURRENT;
 			}
@@ -303,16 +305,22 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 			{
 				break;
 			}
+			//按'S'键保存图像
+			if (key == 's')
+			{
+				vpImageIo::write(currentImage, "desireImage.jpg");
+				cout << "save image" << endl;
+			}
 
 			if (mode == DETECTION)
 			{
 				if (armCamFlag == 1)
 				{
-					msg = "Arm had arrived at desired place,press 'd' to select feature point";
+					msg = "Arm had arrived at initial pose,press 'd' to select desired feature points";
 				}
-				if (armCamFlag == 3)
+				if (armCamFlag == 2)
 				{
-					msg = "Arm had arrived at current place,press 'c' to select feature point";
+					msg = "got desired feature points,press 'c' to select feature point";
 				}
 				vpDisplay::display(currentImage);
 				vpDisplay::displayText(currentImage, 10, 10, msg, vpColor::red);
@@ -320,9 +328,11 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 			}
 			if (mode == DESIRE)
 			{
-				vpDisplay::display(currentImage);
-				vpDisplay::displayText(currentImage, 10, 10, "Select 4 dot to initalize the desired feature points", vpColor::red);
-				vpDisplay::flush(currentImage);		//显示图像
+				vpImageIo::read(desireImage, "desireImage.jpg");
+				
+				vpDisplay::display(desireImage);
+				vpDisplay::displayText(desireImage, 10, 10, "Select 4 dot to initalize the desired feature points", vpColor::red);
+				vpDisplay::flush(desireImage);		//显示图像
 
 				//理想位置特征记录
 				//像素坐标系下特征点的坐标OpenCV,用于solvePnP
@@ -330,8 +340,8 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 				for (unsigned int i = 0; i < 4; i++)
 				{
 					desireDot[i].setGraphics(true);
-					desireDot[i].initTracking(currentImage);
-					vpDisplay::flush(currentImage);
+					desireDot[i].initTracking(desireImage);
+					vpDisplay::flush(desireImage);
 					vpImagePoint dot;
 					dot = desireDot[i].getCog();		//色块重心的像素坐标
 					visualServoAlgorithm.pixelToImage(pd[i], cam, dot);		//获取色块重心图像坐标单位是米，这里没有深度信息
@@ -413,7 +423,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 					cout << "pd" << i << ": " << pd[i].get_x() << ", " << pd[i].get_y() << ", " << pd[i].get_Z() << endl;
 				}
 				mode = TRACKING;
-				armCamFlag = 4;
+				armCamFlag = 3;
 				msg = "Start tracking,press esc to quit";
 			}
 			if (mode == TRACKING)
