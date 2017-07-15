@@ -266,14 +266,14 @@ DWORD WINAPI ArmMotionFun(LPVOID lpParameter)
 	RC_CHECK(cytonCommands->frameMovementExample(desiredPose * relativetrans));
 	RC_CHECK(cytonCommands->MoveJointsExample(jointposition, .000001));
 
-	desiredPose.setTranslation(EcVector(0.0192, 0.1532, 0.529));
-	
-	//relaTransform.set(0.082, 0.148, 0.514);				//相对于当前手爪末端坐标系XYZ的平移量
-	relaOriention.setFrom321Euler(-1.62967, -0.01254, -3.10882);    //绕Z-Y-X欧拉角对当前末端手爪姿态进行旋转
-	desiredPose.setOrientation(relaOriention);
-	//relativetrans.outboardTransformBy(relaTransform, relaOriention);
-	//desiredPose = desiredPose * relativetrans;
-	RC_CHECK(cytonCommands->frameMovementExample(desiredPose));
+	//desiredPose.setTranslation(EcVector(0.0192, 0.1532, 0.529));
+	//
+	////relaTransform.set(0.082, 0.148, 0.514);				//相对于当前手爪末端坐标系XYZ的平移量
+	//relaOriention.setFrom321Euler(-1.62967, -0.01254, -3.10882);    //绕Z-Y-X欧拉角对当前末端手爪姿态进行旋转
+	//desiredPose.setOrientation(relaOriention);
+	////relativetrans.outboardTransformBy(relaTransform, relaOriention);
+	////desiredPose = desiredPose * relativetrans;
+	//RC_CHECK(cytonCommands->frameMovementExample(desiredPose));
 
 	cytonCommands->closeNetwork();
 	delete cytonCommands;
@@ -640,7 +640,7 @@ DWORD WINAPI ArmAvoidFun(LPVOID lpParameter)
 		Sleep(50);
 	}
 	cout << "10. ArmAvoidThread has finished." << endl;
-
+	srvToClientDatas.contralSignal = FINISHARMCONTROL;  //向服务端发送机械臂运动完成的指令
 	navigationAutoflag = 0;			//自动导航完成，标志位置零
 	return 0;
 }

@@ -22,6 +22,7 @@ const int ARMCONTROL = 4;			//机械臂控制
 const int EXITPROGRAM = -1;			//退出程序
 const int EXITSOCKET = -2;			//断开远程连接
 const int NAVIGATIONSTOP = -3;		//导航停止
+const int FINISHARMCONTROL = -4;	//机械臂控制结束
 
 
 //客户端给服务端发送数据的标志位，为1时发送数据

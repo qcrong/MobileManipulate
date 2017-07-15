@@ -97,6 +97,19 @@ void MmsrvToClientDatas::init()
 void MmsrvToClientDatas::play()
 {
 	rfidTh += 0.1;
+	static int sendcontralSignalFlag = 0;
+	//保证控制信号被发送，然后控制位清零
+	if (contralSignal != NOSIGNAL)
+	{
+		sendcontralSignalFlag++;
+		if (sendcontralSignalFlag == 2)
+		{
+			printf("send contralSignal = FINISHARMCONTROL\n");
+			sendcontralSignalFlag = 0;
+			contralSignal = NOSIGNAL;
+		}
+		
+	}
 
 }
 
