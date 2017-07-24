@@ -83,9 +83,10 @@ DWORD WINAPI RFIDNavigationFun(LPVOID lpParameter)
 	}
 	else
 	{
-		//避障线程结束标志位置1，避障线程退出
+		//针对单独调试，避障线程结束标志位置1，避障线程退出
 		//EnterCriticalSection(&thread_cs);
 		VisualNavigationFlag = 1;
+		srvToClientDatas.contralSignal = FINISH_RFID_CONTROL;  //向客户端返回信号，恢复单独控制按钮
 		//LeaveCriticalSection(&thread_cs);
 	}
 
@@ -109,10 +110,23 @@ DWORD WINAPI VisualNavigationFun(LPVOID lpParameter)
 		break;
 	}
 
-	//避障线程结束标志位置1，避障线程退出
-	//EnterCriticalSection(&thread_cs);
-	VisualNavigationFlag = 1;
-	//LeaveCriticalSection(&thread_cs);
+
+	if (navigationAutoflag == NAVIGATIONSTART)
+	{
+		//避障线程结束标志位置1，避障线程退出
+		//EnterCriticalSection(&thread_cs);
+		VisualNavigationFlag = 1;
+		//LeaveCriticalSection(&thread_cs);
+	}
+	else
+	{
+		//避障线程结束标志位置1，避障线程退出
+		VisualNavigationFlag = 1;
+		srvToClientDatas.contralSignal = FINISH_VISUALNAVIGATION_CONTROL;  //向客户端返回信号，恢复单独控制按钮
+	}
+
+	
+
 
 	return 0;
 }
@@ -224,7 +238,7 @@ DWORD WINAPI ArmMotionFun(LPVOID lpParameter)
 		RC_CHECK(cytonCommands->frameMovementExample(desiredPose * relativetrans));
 		//EcSLEEPMS(2000);
 
-		relaTransform.set(0.0, 0.02, 0.0);				//相对于当前手爪末端坐标系XYZ的平移量
+		relaTransform.set(0.0, 0.017, 0.0);				//相对于当前手爪末端坐标系XYZ的平移量
 		relaOriention.setFrom321Euler(0, 0, EcPi / 60);    //绕Z-Y-X欧拉角对当前末端手爪姿态进行旋转
 		relativetrans.outboardTransformBy(relaTransform, relaOriention);
 		//desiredPose = desiredPose * relativetrans;
@@ -354,9 +368,14 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 		string msg = "Arm is moving to initial pose";		//图片上显示的提示信息
 		int key;	//按键值
 
+		DWORD tStrat, tEnd1, tEnd2;  //计算时间
 		vpDisplayOpenCV current(currentImage, 0, 0, "Current camera image");
 		while (1)
 		{
+			tStrat = 0;
+			tEnd1 = 0;
+			tEnd2 = 0;
+			tStrat = GetTickCount();
 			baslerCam.acquireBaslerImg(currentImage);
 
 			key = 0xff & waitKey(30);
@@ -568,6 +587,10 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 						fVe(i) = matfVe.at<float>(i, 0);
 						LeaveCriticalSection(&thread_cs);					
 					}
+
+					tEnd1 = GetTickCount();
+					printf("Use Time:%f\n", (tEnd1 - tStrat)*1.0 / 1000);
+
 					//cout << "fVe:" << endl << fVe << endl << endl;
 					//cout << "/////////////////////" << endl << endl;
 
@@ -575,6 +598,9 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 					visualServoAlgorithm.display_trajectory(currentImage, currentDot);
 					vpServoDisplay::display(task, cam, currentImage, vpColor::green, vpColor::red);	//绘制特征点的当前位置和理想位置
 					vpDisplay::flush(currentImage);
+
+					tEnd2 = GetTickCount();
+					printf("Use Time:%f\n\n\n\n", (tEnd2 - tEnd1)*1.0 / 1000);
 
 					key = 0xff & waitKey(5);
 					if ((key & 255) == 27 || (task.getError()).sumSquare() < 0.00005)   //  esc退出键
@@ -640,7 +666,15 @@ DWORD WINAPI ArmAvoidFun(LPVOID lpParameter)
 		Sleep(50);
 	}
 	cout << "10. ArmAvoidThread has finished." << endl;
-	srvToClientDatas.contralSignal = FINISHARMCONTROL;  //向服务端发送机械臂运动完成的指令
+	if (navigationAutoflag == NAVIGATIONSTART)
+	{	
+		srvToClientDatas.contralSignal = FINISH_AUTONAVIGATION_CONTROL;  //向服务端发送自动导航控制结束的指令
+	}
+	else
+	{
+		srvToClientDatas.contralSignal = FINISHARMCONTROL;  //向服务端发送机械臂运动完成的指令	
+	}
+
 	navigationAutoflag = 0;			//自动导航完成，标志位置零
 	return 0;
 }
