@@ -238,7 +238,7 @@ DWORD WINAPI ArmMotionFun(LPVOID lpParameter)
 		RC_CHECK(cytonCommands->frameMovementExample(desiredPose * relativetrans));
 		//EcSLEEPMS(2000);
 
-		relaTransform.set(0.0, 0.017, 0.0);				//相对于当前手爪末端坐标系XYZ的平移量
+		relaTransform.set(0.0, 0.02, 0.0);				//相对于当前手爪末端坐标系XYZ的平移量
 		relaOriention.setFrom321Euler(0, 0, EcPi / 60);    //绕Z-Y-X欧拉角对当前末端手爪姿态进行旋转
 		relativetrans.outboardTransformBy(relaTransform, relaOriention);
 		//desiredPose = desiredPose * relativetrans;
@@ -252,7 +252,7 @@ DWORD WINAPI ArmMotionFun(LPVOID lpParameter)
 		RC_CHECK(cytonCommands->frameMovementExample(desiredPose * relativetrans));
 		EcSLEEPMS(500);
 
-		cytonCommands->moveGripperExample(-0.001);
+		cytonCommands->moveGripperExample(-0.005);
 		EcSLEEPMS(500);
 
 		////放置
@@ -457,6 +457,8 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 					vpColVector cP;		//相机坐标系下特征点的三维坐标
 					point[i].changeFrame(cdMo, cP);
 					pd[i].set_Z(cP[2]);
+					//深度信息固定不变，当前深度信息设为理想深度信息
+					p[i].set_Z(cP[2]);
 				}
 
 				//返回刷图模式，等待按键c
@@ -482,25 +484,30 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 					visualServoAlgorithm.pixelToImage(p[i], cam, dot);	//获取色块重心图像坐标单位是米，这里没有深度信息
 					point2D.push_back(cv::Point2f(dot.get_u(), dot.get_v()));
 				}
-				Mat rvec = Mat::zeros(3, 1, CV_64FC1); //旋转向量
-				Mat rM; //旋转矩阵
-				Mat tvec;//平移向量
-				solvePnP(point3D, point2D, visualServoAlgorithm.cam_intrinsic_matrix, visualServoAlgorithm.cam_distortion_matrix, rvec, tvec, false, CV_ITERATIVE);
-				Rodrigues(rvec, rM);
-				cout << "旋转矩阵:" << endl;
-				cout << rM << endl;
-				cout << "平移向量:" << endl;
-				cout << tvec << endl;
-				visualServoAlgorithm.setvpHomogeneousMatrix(cMo, rM, tvec);
-				cout << "当前位置其次变换矩阵:" << endl;
-				cout << cMo << endl;
-				//计算深度信息
-				for (int i = 0; i < 4; i++)
-				{
-					vpColVector cP;		//相机坐标系下特征点的三维坐标
-					point[i].changeFrame(cMo, cP);
-					p[i].set_Z(cP[2]);
-				}
+
+				/************************************************************************/
+				/* 固定深度信息注释掉计算当前深度*/
+				/************************************************************************/
+				//Mat rvec = Mat::zeros(3, 1, CV_64FC1); //旋转向量
+				//Mat rM; //旋转矩阵
+				//Mat tvec;//平移向量
+				//solvePnP(point3D, point2D, visualServoAlgorithm.cam_intrinsic_matrix, visualServoAlgorithm.cam_distortion_matrix, rvec, tvec, false, CV_ITERATIVE);
+				//Rodrigues(rvec, rM);
+				//cout << "旋转矩阵:" << endl;
+				//cout << rM << endl;
+				//cout << "平移向量:" << endl;
+				//cout << tvec << endl;
+				//visualServoAlgorithm.setvpHomogeneousMatrix(cMo, rM, tvec);
+				//cout << "当前位置其次变换矩阵:" << endl;
+				//cout << cMo << endl;
+				////计算深度信息
+				//for (int i = 0; i < 4; i++)
+				//{
+				//	vpColVector cP;		//相机坐标系下特征点的三维坐标
+				//	point[i].changeFrame(cMo, cP);
+				//	p[i].set_Z(cP[2]);
+				//}
+
 
 				//写入特征点信息，包括图像坐标和深度信息，单位为m
 				for (unsigned int i = 0; i < 4; i++)
@@ -535,25 +542,29 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 						visualServoAlgorithm.pixelToImage(p[i], cam, dot);	//获取色块重心图像坐标单位是米，这里没有深度信息
 						point2D.push_back(cv::Point2f(dot.get_u(), dot.get_v()));
 					}
-					Mat rvec = Mat::zeros(3, 1, CV_64FC1); //旋转向量
-					Mat rM; //旋转矩阵
-					Mat tvec;//平移向量
-					solvePnP(point3D, point2D, visualServoAlgorithm.cam_intrinsic_matrix, visualServoAlgorithm.cam_distortion_matrix, rvec, tvec, false, CV_ITERATIVE);
-					Rodrigues(rvec, rM);
-					/*cout << "旋转矩阵:" << endl;
-					cout << rM << endl;
-					cout << "平移向量:" << endl;
-					cout << tvec << endl;*/
-					visualServoAlgorithm.setvpHomogeneousMatrix(cMo, rM, tvec);
-					/*cout << "当前位置其次变换矩阵:" << endl;
-					cout << cMo << endl;*/
-					//计算深度信息
-					for (int i = 0; i < 4; i++)
-					{
-						vpColVector cP;		//相机坐标系下特征点的三维坐标
-						point[i].changeFrame(cMo, cP);
-						p[i].set_Z(cP[2]);
-					}
+
+					/************************************************************************/
+					/* 固定深度信息注释掉计算当前深度*/
+					/************************************************************************/
+					//Mat rvec = Mat::zeros(3, 1, CV_64FC1); //旋转向量
+					//Mat rM; //旋转矩阵
+					//Mat tvec;//平移向量
+					//solvePnP(point3D, point2D, visualServoAlgorithm.cam_intrinsic_matrix, visualServoAlgorithm.cam_distortion_matrix, rvec, tvec, false, CV_ITERATIVE);
+					//Rodrigues(rvec, rM);
+					///*cout << "旋转矩阵:" << endl;
+					//cout << rM << endl;
+					//cout << "平移向量:" << endl;
+					//cout << tvec << endl;*/
+					//visualServoAlgorithm.setvpHomogeneousMatrix(cMo, rM, tvec);
+					///*cout << "当前位置其次变换矩阵:" << endl;
+					//cout << cMo << endl;*/
+					////计算深度信息
+					//for (int i = 0; i < 4; i++)
+					//{
+					//	vpColVector cP;		//相机坐标系下特征点的三维坐标
+					//	point[i].changeFrame(cMo, cP);
+					//	p[i].set_Z(cP[2]);
+					//}
 					
 					//task.set_fVe(fMe);
 					//cMf = cMe*(fMe.inverse());
