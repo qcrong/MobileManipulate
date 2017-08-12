@@ -372,10 +372,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 		vpDisplayOpenCV current(currentImage, 0, 0, "Current camera image");
 		while (1)
 		{
-			tStrat = 0;
-			tEnd1 = 0;
-			tEnd2 = 0;
-			tStrat = GetTickCount();
+			
 			baslerCam.acquireBaslerImg(currentImage);
 
 			key = 0xff & waitKey(30);
@@ -524,6 +521,11 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 			{
 				while (true)
 				{
+					tStrat = 0;
+					tEnd1 = 0;
+					tEnd2 = 0;
+					tStrat = GetTickCount();
+
 					baslerCam.acquireBaslerImg(currentImage);
 
 					//获取机械臂末端在基坐标系下的位姿
