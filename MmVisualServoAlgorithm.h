@@ -17,6 +17,10 @@
 #include <visp3/io/vpImageIo.h>
 #include <visp3/vs/vpServo.h>
 #include <visp3/vs/vpServoDisplay.h>
+#include <visp3/gui/vpDisplayOpenCV.h>
+#include <visp3/vision/vpKeyPoint.h>
+#include <visp3/klt/vpKltOpencv.h>
+
 
 using namespace std;
 using namespace cv;
