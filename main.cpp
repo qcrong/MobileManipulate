@@ -504,6 +504,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 		//! [Create tracker]
 
 		tracker.initTracking(cvCurrentImage, iPcurSelect);
+		std::cout << "Tracker initialized with " << tracker.getNbFeatures() << " features" << std::endl;
 
 		while (true)
 		{
@@ -512,13 +513,18 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 			vpImageConvert::convert(currentImage, cvCurrentImage);
 			tracker.track(cvCurrentImage);
 
+			std::vector<cv::Point2f> current_key_points = tracker.getFeatures();
 
-
-			tracker.display(currentImage, vpColor::red);
+			
 			//更新图像
 			combinationImage.insert(currentImage, vpImagePoint(0, currentImage.getWidth()));
 			vpDisplay::display(combinationImage);
 			vpDisplay::displayLine(combinationImage, vpImagePoint(0, currentImage.getWidth()), vpImagePoint(currentImage.getHeight(), currentImage.getWidth()), vpColor::white, 2);//图像分割线
+			int nbCurrent_key_points = current_key_points.size();
+			for (int i = 0; i < nbCurrent_key_points; i++)
+			{
+				vpDisplay::displayLine(combinationImage, vpImagePoint(iPrefSelect[i].x, iPrefSelect[i].y), vpImagePoint(current_key_points[i].x , current_key_points[i].y+desireImage.getWidth()), vpColor::green);
+			}
 			vpDisplay::flush(combinationImage);
 
 			key = 0xff & waitKey(30);
