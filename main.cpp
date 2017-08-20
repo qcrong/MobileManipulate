@@ -382,104 +382,165 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 
 		//读入理想图片，并检测特征点
 		vpImageIo::read(desireImage, "desireImage.jpg");
-		std::cout << "Reference keypoints=" << keypoint.buildReference(desireImage) << std::endl;
-
-
-		combinationImage.resize(currentImage.getHeight(), 2 * currentImage.getWidth());
-		combinationImage.insert(desireImage, vpImagePoint(0, 0));	//左边插入理想图像
-		combinationImage.insert(currentImage, vpImagePoint(0, currentImage.getWidth()));	//右边插入当前图像
-		vpDisplayOpenCV ibvs(combinationImage, 0, 0, "IBVS");
-		vpDisplay::display(combinationImage);
-		vpDisplay::flush(combinationImage);
-		
-		//RANSAC后剩余的特征点个数
-		unsigned int nbMatchRANSAC = 0;
-		//选择后的匹配特征点
-		//vpImagePoint iPref, iPcur;
-		vector<cv::Point2f> iPrefSelect, iPcurSelect;
 
 		while (true)
 		{
+			std::cout << "Reference keypoints=" << keypoint.buildReference(desireImage) << std::endl;
 
-			baslerCam.acquireBaslerImg(currentImage);
 
-			//更新图像
-			combinationImage.insert(currentImage, vpImagePoint(0, currentImage.getWidth()));
+			combinationImage.resize(currentImage.getHeight(), 2 * currentImage.getWidth());
+			combinationImage.insert(desireImage, vpImagePoint(0, 0));	//左边插入理想图像
+			combinationImage.insert(currentImage, vpImagePoint(0, currentImage.getWidth()));	//右边插入当前图像
+			vpDisplayOpenCV ibvs(combinationImage, 0, 0, "IBVS");
 			vpDisplay::display(combinationImage);
-			vpDisplay::displayLine(combinationImage, vpImagePoint(0, currentImage.getWidth()), vpImagePoint(currentImage.getHeight(), currentImage.getWidth()), vpColor::white, 2);//图像分割线
 			vpDisplay::flush(combinationImage);
 
-			//特征点匹配
-			if (armCamFlag == 1)	//机械臂运动到初始位姿
+
+			//RANSAC后剩余的特征点个数
+			unsigned int nbMatchRANSAC = 0;
+			//选择后的匹配特征点
+			//vpImagePoint iPref, iPcur;
+			vector<cv::Point2f> iPrefSelect, iPcurSelect;
+
+			while (true)
 			{
-				unsigned int nbMatch = keypoint.matchPoint(currentImage);
-				std::cout << "Matches=" << nbMatch << std::endl;
-				//RANSAC去除误匹配
-				std::vector<vpImagePoint> iPref(nbMatch), iPcur(nbMatch); // Coordinates in pixels (for display only)
-				std::vector<vpImagePoint> iPrefInliers, iPcurInliers;   //RANSACA筛选后的内点
-				//! [Allocation]
-				std::vector<double> mPref_x(nbMatch), mPref_y(nbMatch);
-				std::vector<double> mPcur_x(nbMatch), mPcur_y(nbMatch);
-				std::vector<bool> inliers(nbMatch);
-				//! [Allocation]
 
-				for (unsigned int i = 0; i < nbMatch; i++) 
+				baslerCam.acquireBaslerImg(currentImage);
+
+				//更新图像
+				combinationImage.insert(currentImage, vpImagePoint(0, currentImage.getWidth()));
+				vpDisplay::display(combinationImage);
+				vpDisplay::displayLine(combinationImage, vpImagePoint(0, currentImage.getWidth()), vpImagePoint(currentImage.getHeight(), currentImage.getWidth()), vpColor::white, 2);//图像分割线
+				vpDisplay::flush(combinationImage);
+
+				//特征点匹配
+				if (armCamFlag == 1)	//机械臂运动到初始位姿
 				{
-					keypoint.getMatchedPoints(i, iPref[i], iPcur[i]);
-					//! [Pixel conversion]
-					vpPixelMeterConversion::convertPoint(cam, iPref[i], mPref_x[i], mPref_y[i]);
-					vpPixelMeterConversion::convertPoint(cam, iPcur[i], mPcur_x[i], mPcur_y[i]);
-					//! [Pixel conversion]
+					unsigned int nbMatch = keypoint.matchPoint(currentImage);
+					std::cout << "Matches=" << nbMatch << std::endl;
+					//RANSAC去除误匹配
+					std::vector<vpImagePoint> iPref(nbMatch), iPcur(nbMatch); // Coordinates in pixels (for display only)
+					std::vector<vpImagePoint> iPrefInliers, iPcurInliers;   //RANSACA筛选后的内点
+					//! [Allocation]
+					std::vector<double> mPref_x(nbMatch), mPref_y(nbMatch);
+					std::vector<double> mPcur_x(nbMatch), mPcur_y(nbMatch);
+					std::vector<bool> inliers(nbMatch);
+					//! [Allocation]
+
+					for (unsigned int i = 0; i < nbMatch; i++)
+					{
+						keypoint.getMatchedPoints(i, iPref[i], iPcur[i]);
+						//! [Pixel conversion]
+						vpPixelMeterConversion::convertPoint(cam, iPref[i], mPref_x[i], mPref_y[i]);
+						vpPixelMeterConversion::convertPoint(cam, iPcur[i], mPcur_x[i], mPcur_y[i]);
+						//! [Pixel conversion]
+					}
+
+					double residual;
+					vpHomography curHref;
+					vpHomography::ransac(mPref_x, mPref_y, mPcur_x, mPcur_y, curHref, inliers, residual,
+						(unsigned int)(mPref_x.size()*0.05), 8.0 / cam.get_px(), true);
+
+
+
+					for (unsigned int i = 0; i < nbMatch; i++)
+					{
+						if (inliers[i] == true)
+						{
+							//vpDisplay::displayLine(combinationImage, iPref[i], iPcur[i] + vpImagePoint(0, desireImage.getWidth()), vpColor::green);
+							iPrefInliers.push_back(iPref[i]);
+							iPcurInliers.push_back(iPcur[i]);
+						}
+
+					}
+
+					nbMatchRANSAC = iPrefInliers.size();
+					std::cout << "number of nbMatchRANSAC: " << nbMatchRANSAC << endl;
+					if (nbMatchRANSAC >= 5)
+					{
+						//选取部分特征点
+						int interval = nbMatchRANSAC / 5;
+						//int n = 0;
+						for (unsigned int i = 0; i < nbMatchRANSAC; i += interval)  //i += interval
+						{
+							//keypoint.getMatchedPoints(i, iPref, iPcur);
+							//vpDisplay::displayCross(desireImage, iPrefSel, 10, vpColor::white);
+							//n++;
+							vpDisplay::displayLine(combinationImage, iPrefInliers[i], iPcurInliers[i] + vpImagePoint(0, desireImage.getWidth()), vpColor::green);
+							iPrefSelect.push_back(Point2f(iPrefInliers[i].get_u(), iPrefInliers[i].get_v()));
+							iPcurSelect.push_back(Point2f(iPcurInliers[i].get_u(), iPcurInliers[i].get_v()));
+						}
+
+						//更新图像
+						//combinationImage.insert(desireImage, vpImagePoint(0, 0));	//左边插入理想图像
+						//vpDisplay::display(combinationImage);
+						//vpDisplay::displayLine(combinationImage, vpImagePoint(0, currentImage.getWidth()), vpImagePoint(currentImage.getHeight(), currentImage.getWidth()), vpColor::white, 2);//图像分割线
+						vpImageConvert::convert(currentImage, cvCurrentImage);
+						vpDisplay::flush(combinationImage);
+
+						break;
+					}
+					else
+					{
+						std::cout << "没有足够的特征点用于跟踪" << endl;
+					}
 				}
 
-				double residual;
-				vpHomography curHref;
-				vpHomography::ransac(mPref_x, mPref_y, mPcur_x, mPcur_y, curHref, inliers, residual,
-					(unsigned int)(mPref_x.size()*0.05), 8.0 / cam.get_px(), true);
-
-				
-
-				for (unsigned int i = 0; i < nbMatch; i++)
+				key = 0xff & waitKey(30);
+				if ((key & 255) == 27)   //  esc退出键
 				{
-					if (inliers[i] == true)
-					{
-						vpDisplay::displayLine(combinationImage, iPref[i], iPcur[i] + vpImagePoint(0, desireImage.getWidth()), vpColor::green);
-						iPrefInliers.push_back(iPref[i]);
-						iPcurInliers.push_back(iPcur[i]);
-					}
-						
-				}
-
-				nbMatchRANSAC = iPrefInliers.size();
-				std::cout << "number of nbMatchRANSAC: " << nbMatchRANSAC << endl;
-				if (nbMatchRANSAC >= 6)
-				{
-					//选取部分特征点
-					int interval = nbMatchRANSAC / 6;
-					//int n = 0;
-					for (unsigned int i = 0; i < nbMatchRANSAC; i += interval)  //i += interval
-					{
-						//keypoint.getMatchedPoints(i, iPref, iPcur);
-						//vpDisplay::displayCross(desireImage, iPrefSel, 10, vpColor::white);
-						//n++;
-						//vpDisplay::displayLine(combinationImage, iPrefInliers[i], iPcurInliers[i] + vpImagePoint(0, desireImage.getWidth()), vpColor::green);
-						iPrefSelect.push_back(Point2f(iPrefInliers[i].get_u(),iPrefInliers[i].get_v()));
-						iPcurSelect.push_back(Point2f(iPcurInliers[i].get_u(), iPcurInliers[i].get_v()));
-					}
-					
-					//更新图像
-					//combinationImage.insert(desireImage, vpImagePoint(0, 0));	//左边插入理想图像
-					//vpDisplay::display(combinationImage);
-					//vpDisplay::displayLine(combinationImage, vpImagePoint(0, currentImage.getWidth()), vpImagePoint(currentImage.getHeight(), currentImage.getWidth()), vpColor::white, 2);//图像分割线
-					vpImageConvert::convert(currentImage, cvCurrentImage);
-					vpDisplay::flush(combinationImage);
-
 					break;
 				}
-				else
+			}
+
+			//! [Create tracker]
+			vpKltOpencv tracker;
+			tracker.setMaxFeatures(20);
+			tracker.setWindowSize(10);
+			//! [Quality]
+			tracker.setQuality(0.01);
+			//! [Quality]
+			tracker.setMinDistance(15);
+			tracker.setHarrisFreeParameter(0.04);
+			tracker.setBlockSize(9);
+			tracker.setUseHarris(1);
+			tracker.setPyramidLevels(3);
+			//! [Create tracker]
+
+			tracker.initTracking(cvCurrentImage, iPcurSelect);
+			std::cout << "Tracker initialized with " << tracker.getNbFeatures() << " features" << std::endl;
+
+			while (true)
+			{
+				baslerCam.acquireBaslerImg(currentImage);
+
+				vpImageConvert::convert(currentImage, cvCurrentImage);
+				tracker.track(cvCurrentImage);
+
+				std::vector<cv::Point2f> current_key_points = tracker.getFeatures();
+
+
+				//更新图像
+				combinationImage.insert(currentImage, vpImagePoint(0, currentImage.getWidth()));
+				vpDisplay::display(combinationImage);
+				vpDisplay::displayLine(combinationImage, vpImagePoint(0, currentImage.getWidth()), vpImagePoint(currentImage.getHeight(), currentImage.getWidth()), vpColor::white, 2);//图像分割线
+				int nbCurrent_key_points = current_key_points.size();
+				if (nbCurrent_key_points != 6)
 				{
-					std::cout << "没有足够的特征点用于跟踪" << endl;
+					break;
 				}
+				for (int i = 0; i < nbCurrent_key_points; i++)
+				{
+					vpDisplay::displayLine(combinationImage, vpImagePoint(iPrefSelect[i].y, iPrefSelect[i].x), vpImagePoint(current_key_points[i].y, current_key_points[i].x + desireImage.getWidth()), vpColor::green);
+				}
+				vpDisplay::flush(combinationImage);
+
+				key = 0xff & waitKey(30);
+				if ((key & 255) == 27)   //  esc退出键
+				{
+					break;
+				}
+
 			}
 
 			key = 0xff & waitKey(30);
@@ -488,52 +549,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 				break;
 			}
 		}
-
-		//! [Create tracker]
-		vpKltOpencv tracker;
-		tracker.setMaxFeatures(20);
-		tracker.setWindowSize(10);
-		//! [Quality]
-		tracker.setQuality(0.01);
-		//! [Quality]
-		tracker.setMinDistance(15);
-		tracker.setHarrisFreeParameter(0.04);
-		tracker.setBlockSize(9);
-		tracker.setUseHarris(1);
-		tracker.setPyramidLevels(3);
-		//! [Create tracker]
-
-		tracker.initTracking(cvCurrentImage, iPcurSelect);
-		std::cout << "Tracker initialized with " << tracker.getNbFeatures() << " features" << std::endl;
-
-		while (true)
-		{
-			baslerCam.acquireBaslerImg(currentImage);
-
-			vpImageConvert::convert(currentImage, cvCurrentImage);
-			tracker.track(cvCurrentImage);
-
-			std::vector<cv::Point2f> current_key_points = tracker.getFeatures();
-
-			
-			//更新图像
-			combinationImage.insert(currentImage, vpImagePoint(0, currentImage.getWidth()));
-			vpDisplay::display(combinationImage);
-			vpDisplay::displayLine(combinationImage, vpImagePoint(0, currentImage.getWidth()), vpImagePoint(currentImage.getHeight(), currentImage.getWidth()), vpColor::white, 2);//图像分割线
-			int nbCurrent_key_points = current_key_points.size();
-			for (int i = 0; i < nbCurrent_key_points; i++)
-			{
-				vpDisplay::displayLine(combinationImage, vpImagePoint(iPrefSelect[i].x, iPrefSelect[i].y), vpImagePoint(current_key_points[i].x , current_key_points[i].y+desireImage.getWidth()), vpColor::green);
-			}
-			vpDisplay::flush(combinationImage);
-
-			key = 0xff & waitKey(30);
-			if ((key & 255) == 27)   //  esc退出键
-			{
-				break;
-			}
-
-		}
+		
 		
 
 
