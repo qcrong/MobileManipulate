@@ -356,6 +356,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 		MmVisualServoBase baslerCam;	//相机类
 		vpImage<unsigned char> desireImage;		//当前灰度图像
 		vpImage<unsigned char> currentImage;		//当前灰度图像
+		Mat cvCurrentImage;
 		vpImage<unsigned char> combinationImage;		//理想图像与当前图像的组合
 		baslerCam.baslerOpen(currentImage);		//打开相机
 		baslerCam.acquireBaslerImg(currentImage);
@@ -391,11 +392,11 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 		vpDisplay::display(combinationImage);
 		vpDisplay::flush(combinationImage);
 		
-		//匹配的特征点个数
-		unsigned int nbMatch = 0;
+		//RANSAC后剩余的特征点个数
+		unsigned int nbMatchRANSAC = 0;
 		//选择后的匹配特征点
-		vpImagePoint iPref, iPcur;
-		vector<vpImagePoint> iPrefSelect, iPcurSelect;
+		//vpImagePoint iPref, iPcur;
+		vector<cv::Point2f> iPrefSelect, iPcurSelect;
 
 		while (true)
 		{
@@ -411,31 +412,73 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 			//特征点匹配
 			if (armCamFlag == 1)	//机械臂运动到初始位姿
 			{
-				nbMatch = keypoint.matchPoint(currentImage);
+				unsigned int nbMatch = keypoint.matchPoint(currentImage);
 				std::cout << "Matches=" << nbMatch << std::endl;
-				if (nbMatch >= 9)
+				//RANSAC去除误匹配
+				std::vector<vpImagePoint> iPref(nbMatch), iPcur(nbMatch); // Coordinates in pixels (for display only)
+				std::vector<vpImagePoint> iPrefInliers, iPcurInliers;   //RANSACA筛选后的内点
+				//! [Allocation]
+				std::vector<double> mPref_x(nbMatch), mPref_y(nbMatch);
+				std::vector<double> mPcur_x(nbMatch), mPcur_y(nbMatch);
+				std::vector<bool> inliers(nbMatch);
+				//! [Allocation]
+
+				for (unsigned int i = 0; i < nbMatch; i++) 
+				{
+					keypoint.getMatchedPoints(i, iPref[i], iPcur[i]);
+					//! [Pixel conversion]
+					vpPixelMeterConversion::convertPoint(cam, iPref[i], mPref_x[i], mPref_y[i]);
+					vpPixelMeterConversion::convertPoint(cam, iPcur[i], mPcur_x[i], mPcur_y[i]);
+					//! [Pixel conversion]
+				}
+
+				double residual;
+				vpHomography curHref;
+				vpHomography::ransac(mPref_x, mPref_y, mPcur_x, mPcur_y, curHref, inliers, residual,
+					(unsigned int)(mPref_x.size()*0.25), 2.0 / cam.get_px(), true);
+
+				
+
+				for (unsigned int i = 0; i < nbMatch; i++)
+				{
+					if (inliers[i] == true)
+					{
+						//vpDisplay::displayLine(combinationImage, iPref[i], iPcur[i] + vpImagePoint(0, desireImage.getWidth()), vpColor::green);
+						iPrefInliers.push_back(iPref[i]);
+						iPcurInliers.push_back(iPcur[i]);
+					}
+						
+				}
+
+				nbMatchRANSAC = iPrefInliers.size();
+
+				if (nbMatchRANSAC >= 6)
 				{
 					//选取部分特征点
-					int interval = (nbMatch + 1) / 10;
+					int interval = nbMatchRANSAC / 6;
 					//int n = 0;
-					for (unsigned int i = 0; i < nbMatch; i++)  //i += interval
+					for (unsigned int i = 0; i < nbMatchRANSAC; i += interval)  //i += interval
 					{
-						keypoint.getMatchedPoints(i, iPref, iPcur);
+						//keypoint.getMatchedPoints(i, iPref, iPcur);
 						//vpDisplay::displayCross(desireImage, iPrefSel, 10, vpColor::white);
 						//n++;
-						vpDisplay::displayLine(combinationImage, iPref, iPcur + vpImagePoint(0, desireImage.getWidth()), vpColor::green);
-						iPrefSelect.push_back(iPref);
-						iPcurSelect.push_back(iPcur);
+						vpDisplay::displayLine(combinationImage, iPrefInliers[i], iPcurInliers[i] + vpImagePoint(0, desireImage.getWidth()), vpColor::green);
+						iPrefSelect.push_back(Point2f(iPrefInliers[i].get_u(),iPrefInliers[i].get_v()));
+						iPcurSelect.push_back(Point2f(iPcurInliers[i].get_u(), iPcurInliers[i].get_v()));
 					}
 					
 					//更新图像
 					//combinationImage.insert(desireImage, vpImagePoint(0, 0));	//左边插入理想图像
 					//vpDisplay::display(combinationImage);
 					//vpDisplay::displayLine(combinationImage, vpImagePoint(0, currentImage.getWidth()), vpImagePoint(currentImage.getHeight(), currentImage.getWidth()), vpColor::white, 2);//图像分割线
-					
+					vpImageConvert::convert(currentImage, cvCurrentImage);
 					vpDisplay::flush(combinationImage);
 
 					break;
+				}
+				else
+				{
+					std::cout << "没有足够的特征点用于跟踪" << endl;
 				}
 			}
 
@@ -460,7 +503,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 		tracker.setPyramidLevels(3);
 		//! [Create tracker]
 
-		Mat cvCurrentImage;
+		tracker.initTracking(cvCurrentImage, iPcurSelect);
 
 		while (true)
 		{
