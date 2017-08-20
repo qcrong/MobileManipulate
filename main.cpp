@@ -394,7 +394,8 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 		//匹配的特征点个数
 		unsigned int nbMatch = 0;
 		//选择后的匹配特征点
-		vector<vpImagePoint> iPrefSel, iPcurSel;
+		vpImagePoint iPref, iPcur;
+		vector<vpImagePoint> iPrefSelect, iPcurSelect;
 
 		while (true)
 		{
@@ -407,8 +408,8 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 			vpDisplay::displayLine(combinationImage, vpImagePoint(0, currentImage.getWidth()), vpImagePoint(currentImage.getHeight(), currentImage.getWidth()), vpColor::white, 2);//图像分割线
 			vpDisplay::flush(combinationImage);
 
-			//目标跟踪
-			if (ArmMotionFlag == 1)	//机械臂运动到初始位姿
+			//特征点匹配
+			if (armCamFlag == 1)	//机械臂运动到初始位姿
 			{
 				nbMatch = keypoint.matchPoint(currentImage);
 				std::cout << "Matches=" << nbMatch << std::endl;
@@ -416,18 +417,22 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 				{
 					//选取部分特征点
 					int interval = (nbMatch + 1) / 10;
-					int n = 0;
-					for (unsigned int i = 0; i < nbMatch; i += interval)
+					//int n = 0;
+					for (unsigned int i = 0; i < nbMatch; i++)  //i += interval
 					{
-						keypoint.getMatchedPoints(i, iPrefSel[n], iPcurSel[n]);
-						vpDisplay::displayCross(desireImage, iPrefSel[n], 4, vpColor::green);
-						n++;
+						keypoint.getMatchedPoints(i, iPref, iPcur);
+						//vpDisplay::displayCross(desireImage, iPrefSel, 10, vpColor::white);
+						//n++;
+						vpDisplay::displayLine(combinationImage, iPref, iPcur + vpImagePoint(0, desireImage.getWidth()), vpColor::green);
+						iPrefSelect.push_back(iPref);
+						iPcurSelect.push_back(iPcur);
 					}
 					
 					//更新图像
-					combinationImage.insert(desireImage, vpImagePoint(0, 0));	//左边插入理想图像
-					vpDisplay::display(combinationImage);
-					vpDisplay::displayLine(combinationImage, vpImagePoint(0, currentImage.getWidth()), vpImagePoint(currentImage.getHeight(), currentImage.getWidth()), vpColor::white, 2);//图像分割线
+					//combinationImage.insert(desireImage, vpImagePoint(0, 0));	//左边插入理想图像
+					//vpDisplay::display(combinationImage);
+					//vpDisplay::displayLine(combinationImage, vpImagePoint(0, currentImage.getWidth()), vpImagePoint(currentImage.getHeight(), currentImage.getWidth()), vpColor::white, 2);//图像分割线
+					
 					vpDisplay::flush(combinationImage);
 
 					break;
