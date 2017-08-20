@@ -435,7 +435,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 				double residual;
 				vpHomography curHref;
 				vpHomography::ransac(mPref_x, mPref_y, mPcur_x, mPcur_y, curHref, inliers, residual,
-					(unsigned int)(mPref_x.size()*0.25), 2.0 / cam.get_px(), true);
+					(unsigned int)(mPref_x.size()*0.05), 8.0 / cam.get_px(), true);
 
 				
 
@@ -443,7 +443,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 				{
 					if (inliers[i] == true)
 					{
-						//vpDisplay::displayLine(combinationImage, iPref[i], iPcur[i] + vpImagePoint(0, desireImage.getWidth()), vpColor::green);
+						vpDisplay::displayLine(combinationImage, iPref[i], iPcur[i] + vpImagePoint(0, desireImage.getWidth()), vpColor::green);
 						iPrefInliers.push_back(iPref[i]);
 						iPcurInliers.push_back(iPcur[i]);
 					}
@@ -451,7 +451,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 				}
 
 				nbMatchRANSAC = iPrefInliers.size();
-
+				std::cout << "number of nbMatchRANSAC: " << nbMatchRANSAC << endl;
 				if (nbMatchRANSAC >= 6)
 				{
 					//选取部分特征点
@@ -462,7 +462,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 						//keypoint.getMatchedPoints(i, iPref, iPcur);
 						//vpDisplay::displayCross(desireImage, iPrefSel, 10, vpColor::white);
 						//n++;
-						vpDisplay::displayLine(combinationImage, iPrefInliers[i], iPcurInliers[i] + vpImagePoint(0, desireImage.getWidth()), vpColor::green);
+						//vpDisplay::displayLine(combinationImage, iPrefInliers[i], iPcurInliers[i] + vpImagePoint(0, desireImage.getWidth()), vpColor::green);
 						iPrefSelect.push_back(Point2f(iPrefInliers[i].get_u(),iPrefInliers[i].get_v()));
 						iPcurSelect.push_back(Point2f(iPcurInliers[i].get_u(), iPcurInliers[i].get_v()));
 					}
