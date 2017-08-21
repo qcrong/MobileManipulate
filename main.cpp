@@ -368,8 +368,8 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 		//设置深度信息
 		for (int i = 0; i < nbPointSelect; i++)
 		{
-			p[i].set_Z(0.1);
-			pd[i].set_Z(0.1);
+			p[i].set_Z(0.31);
+			pd[i].set_Z(0.31);
 			//添加特征点
 			task.addFeature(p[i], pd[i]);
 		}
