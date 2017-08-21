@@ -351,7 +351,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 		vpServo task;		//视觉伺服处理
 		task.setServo(vpServo::EYEINHAND_CAMERA);
 		task.setForceInteractionMatrixComputation(vpServo::CURRENT);	//使用当前点的深度信息
-		task.setLambda(0.4);    //比例系数
+		task.setLambda(0.1);    //比例系数
 
 		//获取图像
 		MmVisualServoBase baslerCam;	//相机类
@@ -363,13 +363,15 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 		baslerCam.acquireBaslerImg(currentImage);
 
 		//跟踪的特征点个数
-		const int nbPointSelect = 6;
+		const int nbPointSelect = 4;
 		vpFeaturePoint p[nbPointSelect], pd[nbPointSelect];		//当前和理想6个特征点坐标，包括深度信息，单位是m
 		//设置深度信息
 		for (int i = 0; i < nbPointSelect; i++)
 		{
-			p[i].set_Z(0.5);
-			pd[i].set_Z(0.5);
+			p[i].set_Z(0.22);
+			pd[i].set_Z(0.22);
+			//添加特征点
+			task.addFeature(p[i], pd[i]);
 		}
 
 		vector<vpDot2> desireDot(4), currentDot(4);			//理想和当前的4个色块
@@ -410,7 +412,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 			unsigned int nbMatchRANSAC = 0;
 			
 			//选择后的匹配特征点
-			vector<cv::Point2f>  iPcurSelect, iPrefSelect;		//单位是像素
+			vector<cv::Point2f>  iPcurSelect(nbPointSelect), iPrefSelect(nbPointSelect);		//单位是像素
 
 			while (true)
 			{
@@ -430,7 +432,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 					std::cout << "Matches=" << nbMatch << std::endl;
 					//RANSAC去除误匹配
 					std::vector<vpImagePoint> iPref(nbMatch), iPcur(nbMatch); // Coordinates in pixels (for display only)
-					std::vector<vpImagePoint> iPrefInliers, iPcurInliers, mPrefInliers, mPcurInliers;   //RANSACA筛选后的内点
+					std::vector<vpImagePoint> iPrefInliers(nbMatch), iPcurInliers(nbMatch);   //RANSACA筛选后的内点
 					//! [Allocation]
 					std::vector<double> mPref_x(nbMatch), mPref_y(nbMatch);
 					std::vector<double> mPcur_x(nbMatch), mPcur_y(nbMatch);
@@ -452,19 +454,21 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 						(unsigned int)(mPref_x.size()*0.05), 4.0 / cam.get_px(), true);
 
 					//存储RANSAC匹配的特征点
+					nbMatchRANSAC = 0;
 					for (unsigned int i = 0; i < nbMatch; i++)
 					{
 						if (inliers[i] == true)
 						{
 							//vpDisplay::displayLine(combinationImage, iPref[i], iPcur[i] + vpImagePoint(0, desireImage.getWidth()), vpColor::green);
-							iPrefInliers.push_back(iPref[i]);
-							iPcurInliers.push_back(iPcur[i]);
+							iPrefInliers[nbMatchRANSAC] = iPref[i];
+							iPcurInliers[nbMatchRANSAC] = iPcur[i];
+							nbMatchRANSAC++;
 							//mPrefInliers.push_back(vpImagePoint(mPref_x[i], mPref_y[i]));
 						}
 
 					}
 
-					nbMatchRANSAC = iPrefInliers.size();
+					//nbMatchRANSAC = iPrefInliers.size();
 					std::cout << "number of nbMatchRANSAC: " << nbMatchRANSAC << endl;
 					if (nbMatchRANSAC >= nbPointSelect)
 					{
@@ -475,10 +479,10 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 							int j = i*interval;
 							vpDisplay::displayLine(combinationImage, iPrefInliers[j], iPcurInliers[j] + offset, vpColor::green);
 							//保存选取的特征点
-							iPrefSelect.push_back(Point2f(iPrefInliers[i].get_u(), iPrefInliers[i].get_v()));
-							iPcurSelect.push_back(Point2f(iPcurInliers[j].get_u(), iPcurInliers[j].get_v()));
-							pd[i].set_x(mPref_x[i]);
-							pd[i].set_y(mPref_y[i]);
+							iPrefSelect[i] = Point2f(iPrefInliers[j].get_u(), iPrefInliers[j].get_v());
+							iPcurSelect[i] = Point2f(iPcurInliers[j].get_u(), iPcurInliers[j].get_v());
+							pd[i].set_x(mPref_x[j]);
+							pd[i].set_y(mPref_y[j]);
 						}			
 						//刷新图像
 						vpDisplay::flush(combinationImage);
@@ -553,12 +557,10 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 				//记录要跟踪的特征
 				for (int i = 0; i < nbPointSelect; i++)
 				{
-					double px, py;
+					double px = 0, py = 0;
 					vpPixelMeterConversion::convertPoint(cam, vpImagePoint(iPcurPoints[i].y, iPcurPoints[i].x), px, py);
 					p[i].set_x(px);
 					p[i].set_y(py);
-					//添加特征点
-					task.addFeature(p[i], pd[i]);
 				}
 
 				//计算机械臂末端运动速度
@@ -619,7 +621,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 					break;
 				}
 
-				task.kill();
+				//task.kill();
 			}
 
 			//判断上面循环是否由于Esc退出
