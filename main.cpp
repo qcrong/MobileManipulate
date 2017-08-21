@@ -222,7 +222,7 @@ DWORD WINAPI ArmMotionFun(LPVOID lpParameter)
 	{
 		//Sleep(100);
 		cytonCommands->SetEEVelocity(fVe);
-		//cout << fVe << endl << endl;
+		cout << fVe << endl << endl;
 	}
 	fVe << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
 	cytonCommands->SetEEVelocity(fVe);
@@ -368,8 +368,8 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 		//设置深度信息
 		for (int i = 0; i < nbPointSelect; i++)
 		{
-			p[i].set_Z(0.22);
-			pd[i].set_Z(0.22);
+			p[i].set_Z(0.1);
+			pd[i].set_Z(0.1);
 			//添加特征点
 			task.addFeature(p[i], pd[i]);
 		}
