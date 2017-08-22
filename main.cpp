@@ -346,7 +346,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 		point3D.push_back(Point3f(-25, 25, 0));*/
 
 		//理想和当前相机坐标系到目标坐标系的其次变换矩阵
-		vpHomogeneousMatrix cdMo, cMo, cMf;
+		//vpHomogeneousMatrix cdMo, cMo, cMf;
 
 		vpServo task;		//视觉伺服处理
 		task.setServo(vpServo::EYEINHAND_CAMERA);
@@ -364,7 +364,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 
 		//跟踪的特征点个数
 		const int nbPointSelect = 4;
-		vpFeaturePoint p[nbPointSelect], pd[nbPointSelect];		//当前和理想6个特征点坐标，包括深度信息，单位是m
+		vpFeaturePoint p[nbPointSelect], pd[nbPointSelect];		//当前和理想特征点坐标，包括深度信息，单位是m
 		//设置深度信息
 		for (int i = 0; i < nbPointSelect; i++)
 		{
@@ -374,12 +374,12 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 			task.addFeature(p[i], pd[i]);
 		}
 
-		vector<vpDot2> desireDot(4), currentDot(4);			//理想和当前的4个色块
+		//vector<vpDot2> desireDot(4), currentDot(4);			//理想和当前的4个色块
 
 		//不同模式
-		enum { DETECTION = 0, DESIRE = 1, CURRENT = 2, TRACKING = 3 };
-		int mode = DETECTION;
-		string msg = "Arm is moving to initial pose";		//图片上显示的提示信息
+		//enum { DETECTION = 0, DESIRE = 1, CURRENT = 2, TRACKING = 3 };
+		//int mode = DETECTION;
+		//string msg = "Arm is moving to initial pose";		//图片上显示的提示信息
 		int key;	//按键值
 
 		DWORD tStrat, tEnd1, tEnd2;  //计算时间
@@ -409,8 +409,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 
 
 			//RANSAC后剩余的特征点个数
-			unsigned int nbMatchRANSAC = 0;
-			
+			unsigned int nbMatchRANSAC = 0;			
 			//选择后的匹配特征点
 			vector<cv::Point2f>  iPcurSelect(nbPointSelect), iPrefSelect(nbPointSelect);		//单位是像素
 
@@ -481,8 +480,8 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 							//保存选取的特征点
 							iPrefSelect[i] = Point2f(iPrefInliers[j].get_u(), iPrefInliers[j].get_v());
 							iPcurSelect[i] = Point2f(iPcurInliers[j].get_u(), iPcurInliers[j].get_v());
-							pd[i].set_x(mPref_x[j]);
-							pd[i].set_y(mPref_y[j]);
+							//pd[i].set_x(mPref_x[j]);
+							//pd[i].set_y(mPref_y[j]);
 						}			
 						//刷新图像
 						vpDisplay::flush(combinationImage);
@@ -544,6 +543,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 				tracker.track(cvCurrentImage);
 				//获取当前特征点
 				std::vector<cv::Point2f> iPcurPoints = tracker.getFeatures();
+				std::vector<cv::Point2f> iPrefPoints = tracker.getPrevFeatures();
 
 				//若特征点跟丢，重新选取特征点
 				int nbCurrent_key_points = iPcurPoints.size();
@@ -553,14 +553,16 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 					break;
 				}
 
-				std::vector<vpImagePoint> mPcurPoints(nbPointSelect);
 				//记录要跟踪的特征
 				for (int i = 0; i < nbPointSelect; i++)
 				{
 					double px = 0, py = 0;
-					vpPixelMeterConversion::convertPoint(cam, vpImagePoint(iPcurPoints[i].y, iPcurPoints[i].x), px, py);
+					vpPixelMeterConversion::convertPoint(cam, vpImagePoint(iPcurPoints[i].y, iPcurPoints[i].x), px, py);     //还不确定是xy还是yx
 					p[i].set_x(px);
 					p[i].set_y(py);
+					vpPixelMeterConversion::convertPoint(cam, vpImagePoint(iPrefPoints[i].y, iPrefPoints[i].x), px, py);
+					pd[i].set_x(px);
+					pd[i].set_y(py);
 				}
 
 				//计算机械臂末端运动速度
