@@ -222,7 +222,7 @@ DWORD WINAPI ArmMotionFun(LPVOID lpParameter)
 	{
 		//Sleep(100);
 		cytonCommands->SetEEVelocity(fVe);
-		cout << fVe << endl << endl;
+		//cout << fVe << endl << endl;
 	}
 	fVe << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
 	cytonCommands->SetEEVelocity(fVe);
@@ -363,13 +363,13 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 		baslerCam.acquireBaslerImg(currentImage);
 
 		//跟踪的特征点个数
-		const int nbPointSelect = 8;
+		const int nbPointSelect = 6;
 		vpFeaturePoint p[nbPointSelect], pd[nbPointSelect];		//当前和理想特征点坐标，包括深度信息，单位是m
 		//设置深度信息
 		for (int i = 0; i < nbPointSelect; i++)
 		{
-			p[i].set_Z(0.31);
-			pd[i].set_Z(0.31);
+			p[i].set_Z(0.25);
+			pd[i].set_Z(0.25);
 			//添加特征点
 			task.addFeature(p[i], pd[i]);
 		}
