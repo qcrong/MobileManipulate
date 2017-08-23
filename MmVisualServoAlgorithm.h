@@ -59,6 +59,10 @@ public:
 	double camDistortionParam[5];
 	//机械臂末端运动速度
 	vpColVector eV;
+	//与vpHomography::project（const vpHomography & bHa, const vpPoint & Pa ）作用一致
+	//将a图像平面上的pa(xa,ya,1)映射到b图像平面上的pb(xb,yb,1),单位是m
+	vpFeaturePoint project(const vpHomography & bHa, const vpFeaturePoint & Pa);
+
 
 private:
 	//绘制特征点在图像上的运动轨迹

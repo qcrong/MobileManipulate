@@ -277,3 +277,20 @@ void MmVisualServoAlgorithm::eVeTransmitTofVe(const Mat &eVe, const Mat &fRe, Ma
 	outfVe.at<float>(4, 0) = fwe.at<float>(1, 0);
 	outfVe.at<float>(5, 0) = fwe.at<float>(2, 0);
 }
+
+//与vpHomography::project（const vpHomography & bHa, const vpPoint & Pa ）作用一致
+//将a图像平面上的pa(xa,ya,1)映射到b图像平面上的pb(xb,yb,1),单位是m
+vpFeaturePoint MmVisualServoAlgorithm::project(const vpHomography & bHa, const vpFeaturePoint & Pa)
+{
+	double xa = Pa.get_x();
+	double ya = Pa.get_y();
+	double z = xa * bHa[2][0] + ya * bHa[2][1] + bHa[2][2];
+	double xb = (xa * bHa[0][0] + ya * bHa[0][1] + bHa[0][2]) / z;
+	double yb = (xa * bHa[1][0] + ya * bHa[1][1] + bHa[1][2]) / z;
+
+	vpFeaturePoint Pb;
+	Pb.set_x(xb);
+	Pb.set_y(yb);
+
+	return Pb;
+}
