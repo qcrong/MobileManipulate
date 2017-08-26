@@ -668,7 +668,7 @@ EcBoolean EcCytonCommands::SetEEVelocity(VectorXd & EEVelo)
 	{
 		//考虑速度上限，为运动设置速度上限
 		VectorXd VeloLimit(6);
-		VeloLimit << 0.3, 0.3, 0.3, 0.2, 0.2, 0.2;
+		VeloLimit << 0.03, 0.03, 0.03, 0.03, 0.03, 0.03;
 		for (int j = 0; j < 6; ++j)
 		{
 			if (fabs(EEVelo(j))>VeloLimit(j))

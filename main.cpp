@@ -37,6 +37,8 @@ volatile int ArmMotionFlag = 0;
 volatile int ThreadsExitFlag = 0;
 //机械臂和相机线程的同步控制标志位，相机运动到位时置1，相机处理完成置2
 volatile int armCamFlag = 0;
+
+
 //视觉计算出来的基坐标系下机械臂末端运动速度
 VectorXd fVe(6);
 //机械臂控制类指针，作为全局变量方便视觉线程获取机械臂信息
@@ -54,7 +56,8 @@ HANDLE ArmMotionThread;				//机械臂抓取线程
 HANDLE MobileRobotAviodThread;		//移动机器人避障线程
 HANDLE ArmAvoidThread;				//机械臂避障线程
 HANDLE SendDatasThread;				//套接字数据发送线程
-HANDLE CamThread;				//套接字数据接收线程
+HANDLE CamThread;				    //套接字数据接收线程
+HANDLE ShowArmCameraThread;         //手臂摄像头图像显示
 
 //TCP全局变量
 int tcpThreadFlag = 0;		//线程函数终止标志位，为1时线程退出
@@ -161,7 +164,7 @@ DWORD WINAPI ArmMotionFun(LPVOID lpParameter)
 	jointposition[3] = -EcPi / 180 * 80;
 	jointposition[5] = -EcPi / 180 * 70;
 	RC_CHECK(cytonCommands->MoveJointsExample(jointposition, .000001));
-	cytonCommands->moveGripperExample(.0079);
+	cytonCommands->moveGripperExample(.0078);
 	//从关节角控制切换到位姿控制，对当前位姿进行初始化
 	EcCoordinateSystemTransformation desiredPose;
 	cytonCommands->changeToFrameEE(desiredPose);
@@ -176,19 +179,19 @@ DWORD WINAPI ArmMotionFun(LPVOID lpParameter)
 	armCamFlag = 1;    //相机运动到当前位姿
 
 	//等待相机获取理想位姿信息和当前位姿信息
-	//while (armCamFlag != 3 && armCamFlag != -1)
-	//{
-	//	Sleep(100);
-	//	if (ThreadsExitFlag == NAVIGATIONSTOP)
-	//	{
-	//		cytonCommands->closeNetwork();
-	//		cout << "9. ArmMotionThread has finished." << endl;
-	//		//EnterCriticalSection(&thread_cs);
-	//		ArmMotionFlag = 1;
-	//		//LeaveCriticalSection(&thread_cs);
-	//		return 1;
-	//	}
-	//}
+	while (armCamFlag != 3 && armCamFlag != -1)
+	{
+		Sleep(100);
+		if (ThreadsExitFlag == NAVIGATIONSTOP)
+		{
+			cytonCommands->closeNetwork();
+			cout << "9. ArmMotionThread has finished." << endl;
+			//EnterCriticalSection(&thread_cs);
+			ArmMotionFlag = 1;
+			//LeaveCriticalSection(&thread_cs);
+			return 1;
+		}
+	}
 
 	//调整姿态
 	EnterCriticalSection(&thread_cs);
@@ -196,10 +199,10 @@ DWORD WINAPI ArmMotionFun(LPVOID lpParameter)
 	LeaveCriticalSection(&thread_cs);		
 	cout << "机械臂位姿调整开始" << endl;
 	while (ThreadsExitFlag != NAVIGATIONSTOP && armCamFlag != 4 && armCamFlag != -1)
-	{
-		//Sleep(100);
+	{	
 		cytonCommands->SetEEVelocity(fVe);
-		//cout << fVe << endl << endl;
+		//Sleep(50);
+		cout << fVe << endl << endl;
 	}
 	fVe << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
 	cytonCommands->SetEEVelocity(fVe);
@@ -208,63 +211,62 @@ DWORD WINAPI ArmMotionFun(LPVOID lpParameter)
 	if (armCamFlag==4)
 	{
 		cytonCommands->changeToFrameEE(desiredPose);
-		relaTransform.set(0.0, 0.0, 0.0);				//相对于当前手爪末端坐标系XYZ的平移量
-		relaOriention.setFrom321Euler(EcPi / 2, 0, 0);    //绕Z-Y-X欧拉角对当前末端手爪姿态进行旋转
+		relaTransform.set(0.04, 0.005, -0.145);				//相对于当前手爪末端坐标系XYZ的平移量
+		relaOriention.setFrom321Euler(0, 0, 0);    //绕Z-Y-X欧拉角对当前末端手爪姿态进行旋转
 		relativetrans.outboardTransformBy(relaTransform, relaOriention);
 		//desiredPose = desiredPose * relativetrans;
 		RC_CHECK(cytonCommands->frameMovementExample(desiredPose * relativetrans));
 		//EcSLEEPMS(2000);
 
-		relaTransform.set(0.0, 0.02, 0.0);				//相对于当前手爪末端坐标系XYZ的平移量
-		relaOriention.setFrom321Euler(0, 0, EcPi / 60);    //绕Z-Y-X欧拉角对当前末端手爪姿态进行旋转
-		relativetrans.outboardTransformBy(relaTransform, relaOriention);
-		//desiredPose = desiredPose * relativetrans;
-		RC_CHECK(cytonCommands->frameMovementExample(desiredPose * relativetrans));
-		//////EcSLEEPMS(2000);
+		//relaTransform.set(0.0, 0.02, 0.0);				//相对于当前手爪末端坐标系XYZ的平移量
+		//relaOriention.setFrom321Euler(0, 0, EcPi / 60);    //绕Z-Y-X欧拉角对当前末端手爪姿态进行旋转
+		//relativetrans.outboardTransformBy(relaTransform, relaOriention);
+		////desiredPose = desiredPose * relativetrans;
+		//RC_CHECK(cytonCommands->frameMovementExample(desiredPose * relativetrans));
+		////////EcSLEEPMS(2000);
 
-		relaTransform.set(0.0, 0.0, -0.130);				//相对于当前手爪末端坐标系XYZ的平移量
-		relaOriention.setFrom321Euler(0, 0, 0);    //绕Z-Y-X欧拉角对当前末端手爪姿态进行旋转
-		relativetrans.outboardTransformBy(relaTransform, relaOriention);
-		//desiredPose = desiredPose * relativetrans;
-		RC_CHECK(cytonCommands->frameMovementExample(desiredPose * relativetrans));
-		EcSLEEPMS(500);
+		//relaTransform.set(0.0, 0.0, -0.130);				//相对于当前手爪末端坐标系XYZ的平移量
+		//relaOriention.setFrom321Euler(0, 0, 0);    //绕Z-Y-X欧拉角对当前末端手爪姿态进行旋转
+		//relativetrans.outboardTransformBy(relaTransform, relaOriention);
+		////desiredPose = desiredPose * relativetrans;
+		//RC_CHECK(cytonCommands->frameMovementExample(desiredPose * relativetrans));
+		//EcSLEEPMS(500);
 
 		cytonCommands->moveGripperExample(-0.005);
 		EcSLEEPMS(500);
 
-		////放置
+		//////放置
 		relaTransform.set(0.0, 0.0, 0.15);				//相对于当前手爪末端坐标系XYZ的平移量
 		relaOriention.setFrom321Euler(0, 0, 0);    //绕Z-Y-X欧拉角对当前末端手爪姿态进行旋转
 		relativetrans.outboardTransformBy(relaTransform, relaOriention);
 		//desiredPose = desiredPose * relativetrans;
 		RC_CHECK(cytonCommands->frameMovementExample(desiredPose * relativetrans));
-		EcSLEEPMS(500);
+		//EcSLEEPMS(500);
 
-		relaTransform.set(0.0, 0.0, -0.13);				//相对于当前手爪末端坐标系XYZ的平移量
-		relaOriention.setFrom321Euler(-EcPi / 4, 0, 0);    //绕Z-Y-X欧拉角对当前末端手爪姿态进行旋转
+		relaTransform.set(0.0, 0.0, -0.14);				//相对于当前手爪末端坐标系XYZ的平移量
+		relaOriention.setFrom321Euler(-EcPi / 8, 0, 0);    //绕Z-Y-X欧拉角对当前末端手爪姿态进行旋转
 		relativetrans.outboardTransformBy(relaTransform, relaOriention);
 		//desiredPose = desiredPose * relativetrans;
 		RC_CHECK(cytonCommands->frameMovementExample(desiredPose * relativetrans));
-		EcSLEEPMS(500);
+		//EcSLEEPMS(500);
 	}
 	
-	cytonCommands->moveGripperExample(0.0079);
+	cytonCommands->moveGripperExample(0.0078);
 	EcSLEEPMS(500);
 
-	relaTransform.set(0.0, 0.0, 0.1);				//相对于当前手爪末端坐标系XYZ的平移量
+	relaTransform.set(0.0, 0.02, 0.05);				//相对于当前手爪末端坐标系XYZ的平移量
 	relaOriention.setFrom321Euler(0, 0, 0);    //绕Z-Y-X欧拉角对当前末端手爪姿态进行旋转
 	relativetrans.outboardTransformBy(relaTransform, relaOriention);
 	RC_CHECK(cytonCommands->frameMovementExample(desiredPose * relativetrans));
 	RC_CHECK(cytonCommands->MoveJointsExample(jointposition, .000001));
 
-	//desiredPose.setTranslation(EcVector(0.0192, 0.1532, 0.529));
-	//
-	////relaTransform.set(0.082, 0.148, 0.514);				//相对于当前手爪末端坐标系XYZ的平移量
-	//relaOriention.setFrom321Euler(-1.62967, -0.01254, -3.10882);    //绕Z-Y-X欧拉角对当前末端手爪姿态进行旋转
-	//desiredPose.setOrientation(relaOriention);
-	////relativetrans.outboardTransformBy(relaTransform, relaOriention);
-	////desiredPose = desiredPose * relativetrans;
-	//RC_CHECK(cytonCommands->frameMovementExample(desiredPose));
+	jointposition.resize(7);		//关节值置零
+	cout << "回到理想位姿" << endl;
+	jointposition[1] = EcPi / 180 * 90;
+	jointposition[3] = -EcPi / 180 * 80;
+	jointposition[5] = -EcPi / 180 * 70;
+	RC_CHECK(cytonCommands->MoveJointsExample(jointposition, .000001));
+
 
 	cytonCommands->closeNetwork();
 	delete cytonCommands;
@@ -312,10 +314,12 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 		vpServo task;		//视觉伺服处理
 		task.setServo(vpServo::EYEINHAND_CAMERA);
 		task.setForceInteractionMatrixComputation(vpServo::CURRENT);	//使用当前点的深度信息
-		task.setLambda(0.1);    //比例系数
+		task.setLambda(0.4);    //比例系数
+		//vpAdaptiveGain lambda(1, 0.4, 30);
+		//task.setLambda(lambda);
 
 		//获取图像
-		MmVisualServoBase baslerCam;	//相机类
+		MmVisualServoBase baslerCam;	//相机类	
 		vpImage<unsigned char> desireImage;		//当前灰度图像
 		vpImage<unsigned char> currentImage;		//当前灰度图像
 		Mat cvCurrentImage;		//当前图像的OpenCV格式，用于特征点跟踪
@@ -338,8 +342,8 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 			vpPixelMeterConversion::convertPoint(cam, ipd[i], ip_x, ip_y);
 			pd[i].set_x(ip_x);
 			pd[i].set_y(ip_y);
-			p[i].set_Z(0.25);
-			pd[i].set_Z(0.25);
+			p[i].set_Z(0.21);
+			pd[i].set_Z(0.21);
 			//添加特征点
 			task.addFeature(p[i], pd[i]);
 		}
@@ -361,20 +365,14 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 
 		std::cout << "Reference keypoints=" << keypoint.buildReference(desireImage) << std::endl;
 
-		vpDisplayOpenCV ibvs(combinationImage, 0, 0, "IBVS");
-		vpDisplay::display(combinationImage);
 
 		combinationImage.resize(currentImage.getHeight(), 2 * currentImage.getWidth());
 		combinationImage.insert(desireImage, vpImagePoint(0, 0));	//左边插入理想图像
 		vpImagePoint offset(0, currentImage.getWidth());
 		combinationImage.insert(currentImage, offset);	//右边插入当前图像
 		vpDisplay::displayLine(combinationImage, offset, vpImagePoint(currentImage.getHeight(), currentImage.getWidth()), vpColor::white, 2);//图像分割线
-		//绘制理想特征点
-		for (int i = 0; i < 4; i++)
-		{
-			vpDisplay::displayCross(combinationImage, ipd[i], 15, vpColor::red);
-		}
-
+		vpDisplayOpenCV ibvs(combinationImage, 0, 0, "IBVS");
+		vpDisplay::display(combinationImage);
 		vpDisplay::flush(combinationImage);
 
 		while (true)
@@ -383,20 +381,31 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 			//RANSAC后剩余的特征点个数
 			unsigned int nbMatchRANSAC = 0;
 			//选择后的匹配特征点
-			vector<cv::Point2f>  iPcurSelect(nbPointSelect), iPrefSelect(nbPointSelect);		//单位是像素
+			//vector<cv::Point2f>  iPcurSelect(nbPointSelect), iPrefSelect(nbPointSelect);		//单位是像素
 
 			baslerCam.acquireBaslerImg(currentImage);
+			combinationImage.insert(currentImage, offset);
 			vpDisplay::display(combinationImage);
-			//获取机械臂末端在基坐标系下的位姿
-			EcReArray fTe;
-			cytonCommands->GetPose(fTe);
+			vpDisplay::displayLine(combinationImage, offset, vpImagePoint(currentImage.getHeight(), currentImage.getWidth()), vpColor::white, 2);//图像分割线
 
 			//特征点匹配
-			if (armCamFlag == 1)	//机械臂运动到初始位姿,或跟丢情况下进行重新跟踪
+			if (armCamFlag == 1 || armCamFlag == 3)	//机械臂运动到初始位姿,或跟丢情况下进行重新跟踪
 			{
+				armCamFlag = 3;
+				//获取机械臂末端在基坐标系下的位姿
+				EcReArray fTe;
+				cytonCommands->GetPose(fTe);
 
 				unsigned int nbMatch = keypoint.matchPoint(currentImage);
-				std::cout << "Matches=" << nbMatch << std::endl;
+				//std::cout << "Matches=" << nbMatch << std::endl;
+
+				if (nbMatch<5)
+				{
+					cout << "Number of matches points are less than 5" << endl;
+					break;
+				}
+
+
 				//RANSAC去除误匹配
 				std::vector<vpImagePoint> iPref(nbMatch), iPcur(nbMatch); // Coordinates in pixels (for display only)
 				//std::vector<vpImagePoint> iPrefInliers(nbMatch), iPcurInliers(nbMatch);   //RANSACA筛选后的内点
@@ -418,20 +427,29 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 
 				double residual;
 				vpHomography curHref;
-				bool calculate_fVe;
-				calculate_fVe = vpHomography::ransac(mPref_x, mPref_y, mPcur_x, mPcur_y, curHref, inliers, residual,
-					(unsigned int)(mPref_x.size()*0.25), 4.0 / cam.get_px(), true);
+				bool calculate_fVe = 0;
+				//calculate_fVe = vpHomography::ransac(mPref_x, mPref_y, mPcur_x, mPcur_y, curHref, inliers, residual,
+					//(unsigned int)(mPref_x.size()*0.25), 1.0 / cam.get_px(), true);
 
+				// 利用robust算法估计单应性矩阵，结果存储在curHref
+				vpHomography::robust(mPref_x, mPref_y, mPcur_x, mPcur_y, curHref, inliers, residual,
+					0.2, 8, true);
 
-				if (calculate_fVe == true)
+				vector<vpImagePoint> pa2(4);
+				//if (calculate_fVe == true)
 				{
 					int ii = 0;
-					for (int i = 0; i < 4; i++);
+					for (int i = 0; i < 4; i++)
 					{
 						vpFeaturePoint pa;
 						pa = visualServoAlgorithm.project(curHref, pd[ii]);
 						p[ii].set_x(pa.get_x());
 						p[ii].set_y(pa.get_y());
+						//cout << "p" << ii << ": " << p[ii].get_x() << ",  " << p[ii].get_y() << endl;
+						
+						pa2[ii] = vpHomography::project(cam, curHref, ipd[ii]);
+						//cout << "pa2" << ii << ": " << pa2[ii] << endl;
+
 						ii++;
 					}
 
@@ -468,181 +486,50 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 					{
 						if (inliers[i]==true)
 						{
-							vpDisplay::displayLine(combinationImage, iPref[i], vpImagePoint(iPcur[i].get_u(), iPcur[i].get_v() + desireImage.getWidth()), vpColor::green);
+							vpDisplay::displayLine(combinationImage, iPref[i], vpImagePoint(iPcur[i].get_v(), iPcur[i].get_u() + desireImage.getWidth()), vpColor::green);
 						}
+					}
+					//绘制4个理想定位点，和4个当前定位点
+					for (int i = 0; i < 4; i++)
+					{
+						vpDisplay::displayCross(combinationImage, vpImagePoint(ipd[i].get_v(), ipd[i].get_u() + desireImage.getWidth()), 15, vpColor::red);
+						vpDisplay::displayCross(combinationImage, vpImagePoint(pa2[i].get_v(), pa2[i].get_u() + desireImage.getWidth()), 15, vpColor::blue);
+					}
+
+					if ((task.getError()).sumSquare() < 0.0005)
+					{
+						armCamFlag = 4;		//机械臂姿态调整
+
+						cout << "均方差：" << (task.getError()).sumSquare() << endl;
+						vpDisplay::getClick(combinationImage, true);
+
+						break;
 					}
 				}
 
 			}
 
 			//更新图像
-			combinationImage.insert(currentImage, offset);
-			vpDisplay::displayLine(combinationImage, offset, vpImagePoint(currentImage.getHeight(), currentImage.getWidth()), vpColor::white, 2);//图像分割线
 			vpDisplay::flush(combinationImage);
 
-			key = 0xff & waitKey(5);
-			if ((key & 255) == 27 || (task.getError()).sumSquare() < 0.0001)   //  esc退出键
+			key = 0xff & waitKey(30);
+			if ((key & 255) == 27 )   //  esc退出键  || (task.getError()).sumSquare() < 0.0001
 			{
-				if ((key & 255) == 27)
-				{
+				//if ((key & 255) == 27)
+				//{
 					armCamFlag = -1;    //机械臂退出运动
-				}
-				else
-				{
-					armCamFlag = 4;		//机械臂姿态调整
-				}
+				//}
+				//else
+				//{
+				//	armCamFlag = 4;		//机械臂姿态调整
+				//}
 
-				cout << "均方差：" << (task.getError()).sumSquare() << endl;
-				vpDisplay::getClick(combinationImage, true);
+				//cout << "均方差：" << (task.getError()).sumSquare() << endl;
+				//vpDisplay::getClick(combinationImage, true);
 
 				break;
 			}
 		}
-
-
-
-
-
-
-			////判断上面循环是否由于Esc退出
-			//if ((key & 255) == 27)   //  esc退出键
-			//{
-			//	break;
-			//}
-
-
-			////! [Create tracker]
-			//vpKltOpencv tracker;
-			//tracker.setMaxFeatures(20);
-			//tracker.setWindowSize(10);
-			////! [Quality]
-			//tracker.setQuality(0.01);
-			////! [Quality]
-			//tracker.setMinDistance(15);
-			//tracker.setHarrisFreeParameter(0.04);
-			//tracker.setBlockSize(9);
-			//tracker.setUseHarris(1);
-			//tracker.setPyramidLevels(3);
-			////! [Create tracker]
-
-			////初始化需要跟踪的特征点
-			//vpImageConvert::convert(currentImage, cvCurrentImage);
-			//tracker.initTracking(cvCurrentImage, iPcurSelect);
-			//std::cout << "Tracker initialized with " << tracker.getNbFeatures() << " features" << std::endl;
-
-
-			//armCamFlag = 3;
-			////特征点持续跟踪
-			//while (true)
-			//{
-			//	baslerCam.acquireBaslerImg(currentImage);
-
-			//	//获取机械臂末端在基坐标系下的位姿
-			//	EcReArray fTe;
-			//	cytonCommands->GetPose(fTe);
-
-			//	vpImageConvert::convert(currentImage, cvCurrentImage);
-			//	//特征点跟踪
-			//	tracker.track(cvCurrentImage);
-			//	//获取当前特征点
-			//	std::vector<cv::Point2f> iPcurPoints = tracker.getFeatures();
-			//	//std::vector<cv::Point2f> iPrefPoints = tracker.getPrevFeatures();
-
-			//	//若特征点跟丢，重新选取特征点
-			//	int nbCurrent_key_points = iPcurPoints.size();
-			//	if (nbCurrent_key_points != nbPointSelect)
-			//	{
-			//		fVe << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;  //机械臂停止运动
-			//		break;
-			//	}
-			//	
-			//	//记录要跟踪的特征
-			//	for (int i = 0; i < nbPointSelect; i++)
-			//	{
-			//		double px = 0, py = 0;
-			//		vpPixelMeterConversion::convertPoint(cam, vpImagePoint(iPcurPoints[i].y, iPcurPoints[i].x), px, py);     //还不确定是xy还是yx
-			//		p[i].set_x(px);
-			//		p[i].set_y(py);
-			//		//cout << "p" << i << ":  " << px << ",  " << py << endl;
-			//		//vpPixelMeterConversion::convertPoint(cam, vpImagePoint(iPrefPoints[i].y, iPrefPoints[i].x), px, py);
-			//		//pd[i].set_x(px);
-			//		//pd[i].set_y(py);
-			//		//cout << "pd" << i << ":  " << px << ",  " << py << endl << endl;				
-
-			//	}
-
-			//	//计算机械臂末端运动速度
-			//	vpColVector vpVc;
-			//	vpVc = task.computeControlLaw();		//相机坐标系运动速度
-			//	//cout << "vpVc" << endl << vpVc << endl;
-			//	//手爪末端坐标系下手爪末端的速度
-			//	Mat eVe = Mat(6, 1, CV_32FC1);
-			//	visualServoAlgorithm.linkageVTransmit(vpVc, eRc, cPe, eVe);
-			//	//cout << "eVe:" << endl << eVe << endl;
-			//	//将末端手爪坐标系下的末端速度转换到基坐标系下
-			//	//基坐标系到末端手爪的旋转矩阵
-			//	Mat fRe = Mat(3, 3, CV_32FC1);
-			//	for (int i = 0; i < 3; i++)
-			//	{
-			//		for (int j = 0; j < 3; j++)
-			//		{
-			//			fRe.at<float>(i, j) = fTe[i][j];
-			//		}
-			//	}
-			//	//cout << "fRe:" << endl << fRe << endl;
-			//	Mat matfVe = Mat(6, 1, CV_32FC1);
-			//	visualServoAlgorithm.eVeTransmitTofVe(eVe, fRe, matfVe);
-			//	//基坐标系下手爪末端速度
-			//	for (unsigned int i = 0; i < 6; i++)
-			//	{
-			//		EnterCriticalSection(&thread_cs);
-			//		fVe(i) = matfVe.at<float>(i, 0);
-			//		LeaveCriticalSection(&thread_cs);
-			//	}
-
-			//	//更新图像
-			//	combinationImage.insert(currentImage, offset);
-			//	vpDisplay::display(combinationImage);
-			//	vpDisplay::displayLine(combinationImage, offset, vpImagePoint(currentImage.getHeight(), currentImage.getWidth()), vpColor::white, 2);//图像分割线
-			//	//绘制理想图像和当前图像的特征点连线
-			//	for (int i = 0; i < nbCurrent_key_points; i++)
-			//	{
-			//		vpDisplay::displayLine(combinationImage, vpImagePoint(iPrefSelect[i].y, iPrefSelect[i].x), vpImagePoint(iPcurPoints[i].y, iPcurPoints[i].x + desireImage.getWidth()), vpColor::green);
-			//		vpDisplay::displayCross(combinationImage, vpImagePoint(iPcurPoints[i].y, iPcurPoints[i].x + desireImage.getWidth()), 10, vpColor::blue);
-			//		vpDisplay::displayCross(combinationImage, vpImagePoint(iPrefSelect[i].y, iPrefSelect[i].x + desireImage.getWidth()), 10, vpColor::red);
-			//	}
-			//	vpDisplay::flush(combinationImage);
-
-			//	key = 0xff & waitKey(5);
-			//	if ((key & 255) == 27 || (task.getError()).sumSquare() < 0.0001)   //  esc退出键
-			//	{
-			//		if ((key & 255) == 27)
-			//		{
-			//			armCamFlag = -1;    //机械臂退出运动
-			//		}
-			//		else
-			//		{
-			//			armCamFlag = 4;		//机械臂姿态调整
-			//		}
-
-			//		cout << "均方差：" << (task.getError()).sumSquare() << endl;
-			//		vpDisplay::getClick(combinationImage, true);
-			//		
-			//		break;
-			//	}
-
-			//	//task.kill();
-			//}
-
-			////判断上面循环是否由于Esc退出
-			//if ((key & 255) == 27 || (task.getError()).sumSquare() < 0.0001)   //  esc退出键
-			//{
-			//	break;
-			//}
-
-
-
-
 		
 		armCamFlag = -1;		//机械臂退出运动
 		baslerCam.close();
@@ -657,6 +544,44 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 
 
 	cout << "10.CamThread has finished." << endl;
+	return 0;
+}
+
+//机械臂摄像头图像显示
+DWORD WINAPI ShowArmCameraFun(LPVOID lpParameter)
+{
+	cout << "ShowArmCameraThread is running." << endl;
+
+	MmVisualServoBase baslerCam;	//相机类
+	vpImage<unsigned char> currentImage;		//当前灰度图像
+	baslerCam.baslerOpen(currentImage);		//打开相机
+	baslerCam.acquireBaslerImg(currentImage);
+
+	vpDisplayOpenCV armCamera(currentImage, 0, 0, "image of arm cammera");
+	int key;
+
+	while (true)
+	{
+		baslerCam.acquireBaslerImg(currentImage);
+
+		vpDisplay::display(currentImage);
+		vpDisplay::flush(currentImage);
+		
+		key = 0xff & waitKey(50);
+		if ((key & 255) == 27 || ThreadsExitFlag==ARM_CAMERA_SHOW_CLOSE)
+		{
+			break;
+		}
+		if ((key & 255)== 's')
+		{
+			vpImageIo::write(currentImage, "desireImageNew.jpg");
+			cout << "save image" << endl;
+		}
+
+	}
+
+	baslerCam.close();
+	cout << "ShowArmCameraThread has been closed." << endl;
 	return 0;
 }
 
@@ -730,6 +655,10 @@ DWORD WINAPI SendDatas(LPVOID lpParameter)
 	tcpThreadFlag = 0;
 	return 0;
 }
+
+
+
+
 //自动连续定位导航开启
 void startAutoNavigation()
 {
@@ -788,6 +717,17 @@ void startArmControl()
 	ArmMotionThread = CreateThread(NULL, 0, ArmMotionFun, NULL, 0, NULL);
 	CamThread = CreateThread(NULL, 0, Camera, NULL, CREATE_SUSPENDED, NULL);
 	ArmAvoidThread = CreateThread(NULL, 0, ArmAvoidFun, NULL, CREATE_SUSPENDED, NULL);
+}
+
+//手臂摄像头图像读取线程函数创建
+void startArmCameraShow()
+{
+	VisualNavigationFlag = 0;
+	ArmMotionFlag = 0;
+	ThreadsExitFlag = 0;
+	navigationAutoflag = ARMCONTROL;
+
+	ShowArmCameraThread = CreateThread(NULL, 0, ShowArmCameraFun, NULL, 0, NULL);
 }
 
 
@@ -879,6 +819,8 @@ char **argv
 			case RFIDNAVIGATION:startRFIDNavigation(); break;		//RFID单独导航，RFID
 			case VISUALNAVIGATION:startVisualNavigation(); break;	//视觉调整，移动平台
 			case ARMCONTROL:startArmControl(); break;			//机械臂控制，机械臂
+			case ARM_CAMERA_SHOW:startArmCameraShow(); break;      //机械臂摄像头图像显示
+			case ARM_CAMERA_SHOW_CLOSE:ThreadsExitFlag = ARM_CAMERA_SHOW_CLOSE; break; //手臂摄像头显示关闭
 
 			default:
 				break;
