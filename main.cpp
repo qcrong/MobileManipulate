@@ -128,7 +128,7 @@ DWORD WINAPI VisualNavigationFun(LPVOID lpParameter)
 		srvToClientDatas.contralSignal = FINISH_VISUALNAVIGATION_CONTROL;  //向客户端返回信号，恢复单独控制按钮
 	}
 
-	
+
 
 
 	return 0;
@@ -196,22 +196,22 @@ DWORD WINAPI ArmMotionFun(LPVOID lpParameter)
 	//调整姿态
 	EnterCriticalSection(&thread_cs);
 	fVe << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
-	LeaveCriticalSection(&thread_cs);		
+	LeaveCriticalSection(&thread_cs);
 	cout << "机械臂位姿调整开始" << endl;
 	while (ThreadsExitFlag != NAVIGATIONSTOP && armCamFlag != 4 && armCamFlag != -1)
-	{	
+	{
 		cytonCommands->SetEEVelocity(fVe);
-		//Sleep(50);
-		cout << fVe << endl << endl;
+		//Sleep(40);
+		//cout << fVe << endl << endl;
 	}
 	fVe << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
 	cytonCommands->SetEEVelocity(fVe);
 
 	//进行抓取
-	if (armCamFlag==4)
+	if (armCamFlag == 4)
 	{
 		cytonCommands->changeToFrameEE(desiredPose);
-		relaTransform.set(0.04, 0.005, -0.145);				//相对于当前手爪末端坐标系XYZ的平移量
+		relaTransform.set(0.04, 0.005, -0.135);				//相对于当前手爪末端坐标系XYZ的平移量
 		relaOriention.setFrom321Euler(0, 0, 0);    //绕Z-Y-X欧拉角对当前末端手爪姿态进行旋转
 		relativetrans.outboardTransformBy(relaTransform, relaOriention);
 		//desiredPose = desiredPose * relativetrans;
@@ -250,7 +250,7 @@ DWORD WINAPI ArmMotionFun(LPVOID lpParameter)
 		RC_CHECK(cytonCommands->frameMovementExample(desiredPose * relativetrans));
 		//EcSLEEPMS(500);
 	}
-	
+
 	cytonCommands->moveGripperExample(0.0078);
 	EcSLEEPMS(500);
 
@@ -288,14 +288,14 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 	{
 		//摄像相机内参数
 		double camIntrinsic[9] = { 1009.417988415312, 0, 329.3878251889672,
-		0, 1008.286720339768, 234.3207569556778,
-		0, 0, 1 };
+			0, 1008.286720339768, 234.3207569556778,
+			0, 0, 1 };
 		visualServoAlgorithm.setCamIntrinsic(camIntrinsic);				//摄像机内参数转换到OpenCV格式下
 		vpCameraParameters cam(camIntrinsic[0], camIntrinsic[4], camIntrinsic[2], camIntrinsic[5]); //摄像相机内参数px py u0 v0
 		//摄像机畸变参数
 		double camDistortion[5] = { -0.3752770440859098, 0.04860296472141773, -0.0001071908873890624, -0.0007867887466124389, 1.639413740673039 };
 		visualServoAlgorithm.setCamDistortion(camDistortion);
-        //手到眼关系
+		//手到眼关系
 		Mat eRc = Mat(3, 3, CV_32FC1); //手到眼的旋转矩阵
 		eRc.at<float>(0, 0) = 0.02393;
 		eRc.at<float>(0, 1) = -0.99788;
@@ -327,16 +327,14 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 		baslerCam.baslerOpen(currentImage);		//打开相机
 		baslerCam.acquireBaslerImg(currentImage);
 
-		//跟踪的特征点个数
-		const int nbPointSelect = 4;
-		vector<vpImagePoint> ipd(nbPointSelect);
+		vector<vpImagePoint> ipd(4);
 		ipd[0].set_uv(170, 90);
-		ipd[1].set_uv(470, 90); 
-		ipd[2].set_uv(170, 390); 
+		ipd[1].set_uv(470, 90);
+		ipd[2].set_uv(170, 390);
 		ipd[3].set_uv(470, 390);
-		vpFeaturePoint p[nbPointSelect], pd[nbPointSelect];		//当前和理想特征点坐标，包括深度信息，单位是m
+		vpFeaturePoint p[4], pd[4];		//当前和理想特征点坐标，包括深度信息，单位是m
 		//设置深度信息
-		for (int i = 0; i < nbPointSelect; i++)
+		for (int i = 0; i < 4; i++)
 		{
 			double ip_x = 0, ip_y = 0;
 			vpPixelMeterConversion::convertPoint(cam, ipd[i], ip_x, ip_y);
@@ -350,7 +348,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 
 		int key;	//按键值
 
-		//DWORD tStrat, tEnd1, tEnd2;  //计算时间
+		DWORD tStrat, tEnd1, tEnd2;  //计算时间
 
 		//特征点
 		const std::string detectorName = "ORB";
@@ -365,7 +363,6 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 
 		std::cout << "Reference keypoints=" << keypoint.buildReference(desireImage) << std::endl;
 
-
 		combinationImage.resize(currentImage.getHeight(), 2 * currentImage.getWidth());
 		combinationImage.insert(desireImage, vpImagePoint(0, 0));	//左边插入理想图像
 		vpImagePoint offset(0, currentImage.getWidth());
@@ -377,16 +374,16 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 
 		while (true)
 		{
-
+			tStrat = 0;
+			tEnd1 = 0;
+			tEnd2 = 0;
+			tStrat = GetTickCount();
 			//RANSAC后剩余的特征点个数
 			unsigned int nbMatchRANSAC = 0;
-			//选择后的匹配特征点
-			//vector<cv::Point2f>  iPcurSelect(nbPointSelect), iPrefSelect(nbPointSelect);		//单位是像素
 
 			baslerCam.acquireBaslerImg(currentImage);
 			combinationImage.insert(currentImage, offset);
 			vpDisplay::display(combinationImage);
-			vpDisplay::displayLine(combinationImage, offset, vpImagePoint(currentImage.getHeight(), currentImage.getWidth()), vpColor::white, 2);//图像分割线
 
 			//特征点匹配
 			if (armCamFlag == 1 || armCamFlag == 3)	//机械臂运动到初始位姿,或跟丢情况下进行重新跟踪
@@ -399,7 +396,7 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 				unsigned int nbMatch = keypoint.matchPoint(currentImage);
 				//std::cout << "Matches=" << nbMatch << std::endl;
 
-				if (nbMatch<5)
+				if (nbMatch < 5)
 				{
 					cout << "Number of matches points are less than 5" << endl;
 					break;
@@ -408,11 +405,9 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 
 				//RANSAC去除误匹配
 				std::vector<vpImagePoint> iPref(nbMatch), iPcur(nbMatch); // Coordinates in pixels (for display only)
-				//std::vector<vpImagePoint> iPrefInliers(nbMatch), iPcurInliers(nbMatch);   //RANSACA筛选后的内点
 				//! [Allocation]
 				std::vector<double> mPref_x(nbMatch), mPref_y(nbMatch);
 				std::vector<double> mPcur_x(nbMatch), mPcur_y(nbMatch);
-				//std::vector<double> mPrefInliers_x(nbMatch), mPrefInliers_y(nbMatch);
 				std::vector<bool> inliers(nbMatch);
 				//! [Allocation]
 
@@ -429,114 +424,112 @@ DWORD WINAPI Camera(LPVOID lpParameter)
 				vpHomography curHref;
 				bool calculate_fVe = 0;
 				//calculate_fVe = vpHomography::ransac(mPref_x, mPref_y, mPcur_x, mPcur_y, curHref, inliers, residual,
-					//(unsigned int)(mPref_x.size()*0.25), 1.0 / cam.get_px(), true);
+				//(unsigned int)(mPref_x.size()*0.25), 1.0 / cam.get_px(), true);
 
 				// 利用robust算法估计单应性矩阵，结果存储在curHref
 				vpHomography::robust(mPref_x, mPref_y, mPcur_x, mPcur_y, curHref, inliers, residual,
-					0.2, 8, true);
+					0.2, 6, true);
 
 				vector<vpImagePoint> pa2(4);
 				//if (calculate_fVe == true)
+				//{
+				//int ii = 0;
+				for (int i = 0; i < 4; i++)
 				{
-					int ii = 0;
-					for (int i = 0; i < 4; i++)
-					{
-						vpFeaturePoint pa;
-						pa = visualServoAlgorithm.project(curHref, pd[ii]);
-						p[ii].set_x(pa.get_x());
-						p[ii].set_y(pa.get_y());
-						//cout << "p" << ii << ": " << p[ii].get_x() << ",  " << p[ii].get_y() << endl;
-						
-						pa2[ii] = vpHomography::project(cam, curHref, ipd[ii]);
-						//cout << "pa2" << ii << ": " << pa2[ii] << endl;
+					vpFeaturePoint pa;
+					pa = visualServoAlgorithm.project(curHref, pd[i]);
+					p[i].set_x(pa.get_x());
+					p[i].set_y(pa.get_y());
+					//cout << "p" << ii << ": " << p[ii].get_x() << ",  " << p[ii].get_y() << endl;
 
-						ii++;
-					}
+					pa2[i] = vpHomography::project(cam, curHref, ipd[i]);
+					//cout << "pa2" << ii << ": " << pa2[ii] << endl;
 
-					//计算机械臂末端运动速度
-					vpColVector vpVc;
-					vpVc = task.computeControlLaw();		//相机坐标系运动速度
-					//cout << "vpVc" << endl << vpVc << endl;
-					//手爪末端坐标系下手爪末端的速度
-					Mat eVe = Mat(6, 1, CV_32FC1);
-					visualServoAlgorithm.linkageVTransmit(vpVc, eRc, cPe, eVe);
-					//cout << "eVe:" << endl << eVe << endl;
-					//将末端手爪坐标系下的末端速度转换到基坐标系下
-					//基坐标系到末端手爪的旋转矩阵
-					Mat fRe = Mat(3, 3, CV_32FC1);
-					for (int i = 0; i < 3; i++)
-					{
-						for (int j = 0; j < 3; j++)
-						{
-							fRe.at<float>(i, j) = fTe[i][j];
-						}
-					}
-					//cout << "fRe:" << endl << fRe << endl;
-					Mat matfVe = Mat(6, 1, CV_32FC1);
-					visualServoAlgorithm.eVeTransmitTofVe(eVe, fRe, matfVe);
-					//基坐标系下手爪末端速度
-					for (unsigned int i = 0; i < 6; i++)
-					{
-						EnterCriticalSection(&thread_cs);
-						fVe(i) = matfVe.at<float>(i, 0);
-						LeaveCriticalSection(&thread_cs);
-					}
-
-					for (unsigned int i = 0; i < nbMatch; i++)
-					{
-						if (inliers[i]==true)
-						{
-							vpDisplay::displayLine(combinationImage, iPref[i], vpImagePoint(iPcur[i].get_v(), iPcur[i].get_u() + desireImage.getWidth()), vpColor::green);
-						}
-					}
-					//绘制4个理想定位点，和4个当前定位点
-					for (int i = 0; i < 4; i++)
-					{
-						vpDisplay::displayCross(combinationImage, vpImagePoint(ipd[i].get_v(), ipd[i].get_u() + desireImage.getWidth()), 15, vpColor::red);
-						vpDisplay::displayCross(combinationImage, vpImagePoint(pa2[i].get_v(), pa2[i].get_u() + desireImage.getWidth()), 15, vpColor::blue);
-					}
-
-					if ((task.getError()).sumSquare() < 0.0005)
-					{
-						armCamFlag = 4;		//机械臂姿态调整
-
-						cout << "均方差：" << (task.getError()).sumSquare() << endl;
-						vpDisplay::getClick(combinationImage, true);
-
-						break;
-					}
+					//ii++;
 				}
 
+				//计算机械臂末端运动速度
+				vpColVector vpVc;
+				vpVc = task.computeControlLaw();		//相机坐标系运动速度
+				//cout << "vpVc" << endl << vpVc << endl;
+				//手爪末端坐标系下手爪末端的速度
+				Mat eVe = Mat(6, 1, CV_32FC1);
+				visualServoAlgorithm.linkageVTransmit(vpVc, eRc, cPe, eVe);
+				//cout << "eVe:" << endl << eVe << endl;
+				//将末端手爪坐标系下的末端速度转换到基坐标系下
+				//基坐标系到末端手爪的旋转矩阵
+				Mat fRe = Mat(3, 3, CV_32FC1);
+				for (int i = 0; i < 3; i++)
+				{
+					for (int j = 0; j < 3; j++)
+					{
+						fRe.at<float>(i, j) = fTe[i][j];
+					}
+				}
+				//cout << "fRe:" << endl << fRe << endl;
+				Mat matfVe = Mat(6, 1, CV_32FC1);
+				visualServoAlgorithm.eVeTransmitTofVe(eVe, fRe, matfVe);
+				//基坐标系下手爪末端速度
+				for (unsigned int i = 0; i < 6; i++)
+				{
+					EnterCriticalSection(&thread_cs);
+					fVe(i) = matfVe.at<float>(i, 0);
+					LeaveCriticalSection(&thread_cs);
+				}
+
+				tEnd1 = GetTickCount();
+				printf("Use Time1:%f\n", (tEnd1 - tStrat)*1.0);
+
+				for (unsigned int i = 0; i < nbMatch; i++)
+				{
+					if (inliers[i] == true)
+					{
+						vpDisplay::displayLine(combinationImage, iPref[i], vpImagePoint(iPcur[i].get_v(), iPcur[i].get_u() + desireImage.getWidth()), vpColor::green);
+					}
+				}
+				//绘制4个理想定位点，和4个当前定位点
+				for (int i = 0; i < 4; i++)
+				{
+					vpDisplay::displayCross(combinationImage, vpImagePoint(ipd[i].get_v(), ipd[i].get_u() + desireImage.getWidth()), 15, vpColor::red);
+					vpDisplay::displayCross(combinationImage, vpImagePoint(pa2[i].get_v(), pa2[i].get_u() + desireImage.getWidth()), 15, vpColor::blue);
+				}
+
+				if ((task.getError()).sumSquare() < 0.0005)
+				{
+					armCamFlag = 4;		//机械臂姿态调整
+
+					cout << "均方差：" << (task.getError()).sumSquare() << endl;
+					vpDisplay::getClick(combinationImage, true);
+
+					break;
+				}
+				//}
+
 			}
+
+			vpDisplay::displayLine(combinationImage, offset, vpImagePoint(currentImage.getHeight(), currentImage.getWidth()), vpColor::white, 2);//图像分割线
 
 			//更新图像
 			vpDisplay::flush(combinationImage);
 
 			key = 0xff & waitKey(30);
-			if ((key & 255) == 27 )   //  esc退出键  || (task.getError()).sumSquare() < 0.0001
+			if ((key & 255) == 27)   //  esc退出键
 			{
-				//if ((key & 255) == 27)
-				//{
-					armCamFlag = -1;    //机械臂退出运动
-				//}
-				//else
-				//{
-				//	armCamFlag = 4;		//机械臂姿态调整
-				//}
-
-				//cout << "均方差：" << (task.getError()).sumSquare() << endl;
-				//vpDisplay::getClick(combinationImage, true);
+				armCamFlag = -1;    //机械臂退出运动
 
 				break;
 			}
+			tEnd2 = GetTickCount();
+			printf("Use Time2:%f\n\n\n\n", (tEnd2 - tEnd1)*1.0);
+
 		}
-		
+
 		armCamFlag = -1;		//机械臂退出运动
 		baslerCam.close();
 		task.kill();
 	}
 
-	catch (vpException &e) 
+	catch (vpException &e)
 	{
 		std::cout << "Catch an exception: " << e << std::endl;
 		armCamFlag = -1;		//机械臂退出运动
@@ -566,13 +559,13 @@ DWORD WINAPI ShowArmCameraFun(LPVOID lpParameter)
 
 		vpDisplay::display(currentImage);
 		vpDisplay::flush(currentImage);
-		
+
 		key = 0xff & waitKey(50);
-		if ((key & 255) == 27 || ThreadsExitFlag==ARM_CAMERA_SHOW_CLOSE)
+		if ((key & 255) == 27 || ThreadsExitFlag == ARM_CAMERA_SHOW_CLOSE)
 		{
 			break;
 		}
-		if ((key & 255)== 's')
+		if ((key & 255) == 's')
 		{
 			vpImageIo::write(currentImage, "desireImageNew.jpg");
 			cout << "save image" << endl;
@@ -615,7 +608,7 @@ DWORD WINAPI ArmAvoidFun(LPVOID lpParameter)
 	}
 	cout << "10. ArmAvoidThread has finished." << endl;
 	if (navigationAutoflag == NAVIGATIONSTART)
-	{	
+	{
 		srvToClientDatas.contralSignal = FINISH_AUTONAVIGATION_CONTROL;  //向服务端发送自动导航控制结束的指令
 	}
 	else
